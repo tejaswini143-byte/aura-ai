@@ -4,7 +4,7 @@ import os
 import unittest
 from unittest.mock import AsyncMock, patch
 
-from app.gnani_bridge import _is_supported_twilio_start, language_code, mulaw8k_to_pcm16, tts_payload
+from app.gnani_bridge import _is_supported_twilio_start, language_code, mulaw8k_to_pcm16, raw_wave_data, tts_payload
 from app.opportunity_discovery import normalize_job, search_live_opportunities
 
 
@@ -82,6 +82,15 @@ class TestGnaniBridgeHelpers(unittest.TestCase):
 
     def test_mulaw_conversion_returns_pcm16(self):
         self.assertEqual(len(mulaw8k_to_pcm16(bytes([0xFF, 0x7F, 0x00]))), 6)
+
+    def test_wave_wrapper_is_removed_without_changing_raw_audio(self):
+        audio = bytes([0xFF, 0x7F, 0x00])
+        self.assertEqual(raw_wave_data(audio), audio)
+        fmt = b"fmt " + (16).to_bytes(4, "little") + bytes(16)
+        data = b"data" + len(audio).to_bytes(4, "little") + audio
+        chunks = fmt + data
+        wav = b"RIFF" + (4 + len(chunks)).to_bytes(4, "little") + b"WAVE" + chunks
+        self.assertEqual(raw_wave_data(wav), audio)
 
 
 if __name__ == "__main__":
