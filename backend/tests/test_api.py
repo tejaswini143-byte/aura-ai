@@ -87,7 +87,7 @@ class TestAuraBackend(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["provider"], "fallback")
         self.assertFalse(response.json()["call_offer"])
-        self.assertIn("verified-number workflow", response.json()["call_unavailable_reason"])
+        self.assertIn("Automatic mood calls are turned off", response.json()["call_unavailable_reason"])
         self.assertFalse(response.json()["automatic_call_triggered"])
 
     def test_02_global_stats(self):
