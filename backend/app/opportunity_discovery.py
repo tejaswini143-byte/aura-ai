@@ -152,7 +152,7 @@ async def search_live_opportunities(search: str = "", location: str = "anywhere"
         "source_notice": "Listings are provided by Jobicy. AURA links to the original listing and does not claim these postings as its own. Remote roles may have geographic restrictions; verify eligibility on the source page.",
         "count": len(filtered),
         "results": filtered,
-        "cached": _cache is not None and time.monotonic() - _cache_at >= 0,
+        "cache_policy": "Source refreshes at most once per hour per running backend process.",
         "cache_ttl_seconds": CACHE_SECONDS,
         "feed_window": "Recent listings from the source feed; this is not a guarantee that a role is still open.",
     }
