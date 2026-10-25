@@ -82,3 +82,31 @@ npm run dev -- --hostname 127.0.0.1 --port 3001
 ```
 
 Open `http://localhost:3001`. The frontend API URL remains configurable with `NEXT_PUBLIC_AURA_API_URL` and defaults to `http://localhost:8000`.
+
+
+## Live opportunity discovery
+
+The Radar now includes an opt-in live remote listing search backed by the public [Jobicy Remote Jobs API](https://jobicy.com/api/v2/remote-jobs). Results are kept separate from saved Radar records until the user selects **Save to Radar**. Each result preserves its canonical Jobicy listing URL and source attribution. The public feed returns recent listings, not a guarantee that every role is still open or eligible for India; check the original listing before applying. The backend caches the source feed for one hour per running process and requests at most 200 source listings per refresh. Live discovery needs outbound HTTPS access from the backend but no API key.
+
+## Optional Gnani Prisma + Timbre voice engine
+
+The existing Gemini Live voice bridge remains the default. An optional Gnani STT + Timbre TTS bridge can be selected with `AURA_VOICE_ENGINE=gnani`. It uses Gnani's documented realtime STT WebSocket and TTS REST endpoint, with Twilio's 8 kHz G.711 mu-law audio converted for STT and synthesized mu-law audio sent back to Twilio.
+
+Configure these server-side environment variables before selecting Gnani:
+- `GNANI_API_KEY`: your account's API key.
+- `GNANI_TTS_VOICE`: a Timbre v2.5 voice valid for the chosen language.
+- `GNANI_LANGUAGE`: fallback language code, such as `te-IN`.
+- `AURA_VOICE_ENGINE=gnani`: selects the Gnani bridge. The bridge also needs `GEMINI_API_KEY` for response generation, valid Twilio credentials, and a public HTTPS/WSS deployment.
+
+Provider connection timestamps are recorded only after the corresponding provider handshake/request succeeds. No provider connection or real phone call is implied by setting the variables alone. Gnani's public API access may have usage quotas and account-specific terms; verify your plan before using it for live calls.
+
+Official API references: [Gnani Quick Start](https://docs.gnani.ai/api/introduction/quick-start), [Realtime STT](https://docs.gnani.ai/api/STT/stt-websocket), and [Realtime TTS](https://docs.gnani.ai/api/TTS/tts-websocket).
+
+## Deployment verification checklist
+
+1. Deploy the backend from `backend/` with the existing start command and one worker for the SQLite scheduler.
+2. Set `AURA_PUBLIC_BASE_URL` to the backend's public HTTPS URL and configure `NEXT_PUBLIC_AURA_API_URL` on the frontend to the same API origin.
+3. Add backend secrets in the hosting provider's secret/environment settings only. Never put Twilio, Gemini, or Gnani keys in `NEXT_PUBLIC_*`, source code, or Git.
+4. Configure Twilio's voice webhook to `/api/telephony/incoming` (POST) if inbound calling is required. Outbound calls require the saved verified destination, explicit user consent, a valid session/action token, quiet-hour/daily limits, and both server switches.
+5. Verify `/api/health`, `/api/providers/status`, `/api/opportunities/discovery`, and the live discovery endpoint after deployment.
+6. Start with the call switches disabled. Only run a manually requested, consented test call after provider status and the public WSS callback have been verified. Enable automatic calling only after that test succeeds.
