@@ -1096,7 +1096,7 @@ def provider_status() -> dict[str, Any]:
                 and os.getenv("GNANI_API_KEY", "").strip()
                 and os.getenv("GNANI_TTS_VOICE", "").strip()
                 and os.getenv("GEMINI_API_KEY", "").strip()
-                else "Configure GNANI_API_KEY, GNANI_TTS_VOICE, GEMINI_API_KEY and set AURA_VOICE_ENGINE=gnani to select the optional Gnani bridge."
+                else "Configure the Gnani credential, choose a supported Timbre voice, ensure Gemini text access is available, and select the Gnani voice engine."
             ),
             "stt_connection_verified": live.get("gnani_stt_connection_verified", False),
             "tts_connection_verified": live.get("gnani_tts_connection_verified", False),
