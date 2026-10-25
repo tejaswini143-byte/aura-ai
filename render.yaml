@@ -1,0 +1,50 @@
+# Render Blueprint for the AURA FastAPI backend.
+# This intentionally uses a paid Starter web service plus a persistent disk:
+# AURA stores tasks, opportunities, preferences, and call metadata in SQLite.
+# Review Render's current charges before creating this service.
+services:
+  - type: web
+    name: aura-ai-backend
+    runtime: python
+    plan: starter
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /api/health
+    disk:
+      name: aura-ai-data
+      mountPath: /var/data
+      sizeGB: 1
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.8
+      - key: AURA_ENVIRONMENT
+        value: production
+      - key: DATABASE_PATH
+        value: /var/data/aura.db
+      - key: AURA_OUTBOUND_CALLS_ENABLED
+        value: "false"
+      - key: AURA_PROACTIVE_CALLS_ENABLED
+        value: "false"
+      - key: AURA_PHONE_VERIFICATION_ENABLED
+        value: "false"
+      - key: AURA_MAX_CALLS_PER_DAY
+        value: "3"
+      - key: AURA_MAX_CALL_DURATION_SECONDS
+        value: "120"
+      - key: AURA_SESSION_COOKIE_SAMESITE
+        value: strict
+      - key: GNANI_LANGUAGE
+        value: te-IN
+      - key: AURA_VOICE_ENGINE
+        value: gnani
+      - key: AURA_ADMIN_PASSWORD
+        generateValue: true
+      - key: AURA_ACTIONS_API_TOKEN
+        generateValue: true
+
+# After the service exists, add private environment variables in the Render
+# dashboard (do not commit their values here):
+# AURA_PUBLIC_BASE_URL, AURA_ALLOWED_ORIGINS, GEMINI_API_KEY,
+# GNANI_API_KEY, GNANI_TTS_VOICE, TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN,
+# TWILIO_FROM_NUMBER, TWILIO_VERIFY_SERVICE_SID.
