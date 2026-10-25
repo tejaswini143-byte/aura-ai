@@ -298,7 +298,9 @@ class TestAuraBackend(unittest.TestCase):
         self.assertFalse(plan2.json()["created"])
         discovery = self.client.get("/api/opportunities/discovery")
         self.assertEqual(discovery.status_code, 200)
-        self.assertFalse(discovery.json()["available"])
+        self.assertTrue(discovery.json()["available"])
+        self.assertEqual(discovery.json()["source"], "Jobicy")
+        self.assertEqual(discovery.json()["mode"], "jobicy_public_api")
 
     def test_milestone6_reminders_deduplicate_and_disable(self):
         task = self.client.post("/api/tasks", json={"title": "Reminder test", "category": "Personal", "priority": "Medium"}).json()
