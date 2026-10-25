@@ -360,3 +360,18 @@ class TestCompanionImprovements(unittest.TestCase):
         from app.main import CompanionPreferencesIn
         payload = CompanionPreferencesIn(personality="Boyfriend")
         self.assertEqual(payload.personality, "Boyfriend")
+
+
+class TestLanguageAwareFallback(unittest.TestCase):
+    def test_latest_message_language_overrides_saved_preference(self):
+        from app.companion import detect_message_language, fallback_companion_reply
+        self.assertEqual(detect_message_language("I feel sad today", "Telugu"), "English")
+        self.assertEqual(detect_message_language("Naku chala baadha ga undi", "English"), "Telugu")
+        self.assertEqual(detect_message_language("मुझे बहुत चिंता हो रही है", "English"), "Hindi")
+        self.assertIn("mellaga cheppu", fallback_companion_reply("Naku chala baadha ga undi", "English"))
+
+    def test_automatic_call_requires_both_backend_switches(self):
+        from unittest.mock import patch
+        from app.main import proactive_calls_switch_on
+        with patch.dict(os.environ, {"AURA_PROACTIVE_CALLS_ENABLED": "false", "AURA_OUTBOUND_CALLS_ENABLED": "true"}, clear=False):
+            self.assertFalse(proactive_calls_switch_on())
