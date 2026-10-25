@@ -1151,11 +1151,12 @@ async def companion_chat(payload: CompanionChatIn, request: Request) -> dict[str
     elif mood in {"sad", "lonely", "anxious", "stressed"}:
         call_reason = "Automatic mood calls are turned off in AURA Settings. Chat support is still available."
 
+    response_language = detect_message_language(payload.message, prefs["preferred_language"])
     return {
         "reply": reply,
         "provider": provider,
         "mood": mood,
-        "response_language": detect_message_language(payload.message, prefs["preferred_language"]),
+        "response_language": response_language,
         "conversation_saved": False,
         "automatic_call_triggered": bool(auto_call and not auto_call.get("idempotent_replay")),
         "automatic_call_status": auto_call.get("status") if auto_call else None,
