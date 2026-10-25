@@ -4,11 +4,11 @@ import re
 from typing import Any
 
 MOOD_TERMS = {
-    "sad": ("sad", "down", "unhappy", "low", "उदास", "దుఃఖంగా", "బాధగా"),
-    "lonely": ("lonely", "alone", "isolated", "अकेला", "ఒంటరిగా"),
-    "anxious": ("anxious", "anxiety", "worried", "nervous", "चिंता", "ఆందోళన"),
-    "stressed": ("stressed", "overwhelmed", "pressure", "तनाव", "ఒత్తిడి"),
-    "happy": ("happy", "great", "good today", "खुश", "సంతోషంగా"),
+    "sad": ("sad", "down", "unhappy", "low", "feeling bad", "baadha ga undi", "badha ga undi", "baadha ga undhi", "బాధగా ఉంది", "బాధగా", "దుఃఖంగా", "उदास", "दुखी"),
+    "lonely": ("lonely", "alone", "isolated", "ontariga", "ontariga unna", "ఒంటరిగా", "अकेला", "अकेली", "अकेलापन"),
+    "anxious": ("anxious", "anxiety", "worried", "nervous", "tension ga undi", "tension ga unna", "ఆందోళన", "చింతగా", "చింత", "चिंता", "परेशान", "घबराहट"),
+    "stressed": ("stressed", "overwhelmed", "pressure", "stress ga undi", "చాలా ఒత్తిడిగా", "ఒత్తిడి", "तनाव", "दबाव"),
+    "happy": ("happy", "great", "good today", "happy ga unna", "chala happy", "సంతోషంగా", "సంతోషంగా ఉంది", "खुश", "खुशी", "बहुत अच्छा"),
 }
 RISK_TERMS = (
     "kill myself", "end my life", "suicide", "self harm", "hurt myself",
@@ -17,10 +17,13 @@ RISK_TERMS = (
 
 
 def detect_mood(message: str) -> str | None:
-    text = message.casefold()
+    text = re.sub(r"[^\w\s]", " ", message.casefold())
+    text = re.sub(r"\s+", " ", text).strip()
     for mood, terms in MOOD_TERMS.items():
-        if any(term.casefold() in text for term in terms):
-            return mood
+        for term in terms:
+            normalized = re.sub(r"\s+", " ", term.casefold()).strip()
+            if re.search(rf"(?<!\w){re.escape(normalized)}(?!\w)", text):
+                return mood
     return None
 
 
