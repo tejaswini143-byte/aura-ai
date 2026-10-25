@@ -8,7 +8,7 @@ MOOD_TERMS = {
     "lonely": ("lonely", "alone", "isolated", "ontariga", "ontariga unna", "ఒంటరిగా", "अकेला", "अकेली", "अकेलापन"),
     "anxious": ("anxious", "anxiety", "worried", "nervous", "tension ga undi", "tension ga unna", "ఆందోళన", "చింతగా", "చింత", "चिंता", "परेशान", "घबराहट"),
     "stressed": ("stressed", "overwhelmed", "pressure", "stress ga undi", "చాలా ఒత్తిడిగా", "ఒత్తిడి", "तनाव", "दबाव"),
-    "happy": ("happy", "great", "good today", "happy ga unna", "chala happy", "సంతోషంగా", "సంతోషంగా ఉంది", "సంతోషంగా ఉంది", "ఈ రోజు చాలా సంతోషంగా ఉంది", "ఖుషీగా", "खुश", "खुशी", "बहुत अच्छा"),
+    "happy": ("happy", "great", "good today", "happy ga unna", "chala happy", "సంతోషంగా", "సంతోషంగా ఉంది", "సంతోషంగా ఉంది", "ఈ రోజు చాలా సంతోషంగా ఉంది", "ఈ రోజు చాలా సంతోషంగా ఉంది", "ఖుషీగా", "ఖుషిగా", "खुश", "खुशी", "बहुत अच्छा"),
 }
 RISK_TERMS = (
     "kill myself", "end my life", "suicide", "self harm", "hurt myself",
