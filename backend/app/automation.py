@@ -333,9 +333,10 @@ class AutomationService:
 class AutomationScheduler:
     """Small SQLite-backed polling scheduler; all deliveries stay in-app."""
 
-    def __init__(self, service: AutomationService, interval_seconds: int = 15):
+    def __init__(self, service: AutomationService, interval_seconds: int = 15, after_tick: Callable[[], Any] | None = None):
         self.service = service
         self.interval_seconds = interval_seconds
+        self.after_tick = after_tick
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
         self._lock = threading.Lock()
@@ -358,6 +359,8 @@ class AutomationScheduler:
         while not self._stop.is_set():
             try:
                 self.service.process_due_jobs()
+                if self.after_tick is not None:
+                    self.after_tick()
             except Exception as exc:
                 logger.warning("Automation scheduler tick failed (%s)", type(exc).__name__)
             self._stop.wait(self.interval_seconds)

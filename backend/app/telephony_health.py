@@ -121,12 +121,21 @@ def telephony_status() -> dict[str, Any]:
     )
     proactive_switch = os.getenv("AURA_PROACTIVE_CALLS_ENABLED", "false").strip().lower() == "true"
     auto_opt_in = bool(prefs and (prefs["automatic_mood_calls"] or prefs["reminder_calls_enabled"]))
+    automatic_ready = bool(
+        proactive_switch and main.outbound_calls_enabled() and manual_ready
+        and auto_opt_in and main.admin_password_configured()
+        and os.getenv("AURA_ACTIONS_API_TOKEN", "").strip()
+    )
     return {
         "manual_calls_enabled": manual_ready,
         "manual_call_route": "/api/calls",
-        "automatic_calls_enabled": False,
-        "automatic_calls_configured": bool(proactive_switch and manual_ready and auto_opt_in),
-        "automatic_calls_reason": "Automatic mood/deadline dispatch is not implemented in this repository version; keep it off until a tested scheduler is connected.",
+        "automatic_calls_enabled": automatic_ready,
+        "automatic_calls_configured": automatic_ready,
+        "automatic_calls_reason": (
+            "Automatic dispatch is configured for saved opt-ins; actual delivery still depends on a successful Twilio and Gemini Live call."
+            if automatic_ready else
+            "Requires both outbound-call switches, admin password and server-only action token, valid provider setup, a verified opted-in destination, and an automatic-call preference."
+        ),
         "incoming_webhook_configured": webhook_configured,
         "incoming_webhook_expected_url": expected_url,
         "incoming_webhook_last_received_at": health.get("inbound_webhook_at"),
