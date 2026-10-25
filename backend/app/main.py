@@ -1076,7 +1076,7 @@ def provider_status() -> dict[str, Any]:
             "incoming_webhook_last_received_at": live["incoming_webhook_last_received_at"],
             "incoming_webhook_check_error": live["incoming_webhook_check_error"],
             "destination_verification_available": live["destination_verification_available"],
-            "reason": "Manual calls require the server switch, admin authentication, Twilio credentials, explicit calling consent, and a verified saved destination. Automatic dispatch remains off until a tested scheduler is connected.",
+            "reason": live["automatic_calls_reason"],
         },
         "dotvoice": {"configured": bool(os.getenv("DOTVOICE_API_KEY", "").strip()), "verified": False, "calls_enabled": False, "reason": "Account permissions and account-specific API access have not been verified."},
         "gnani": {"configured": bool(os.getenv("GNANI_API_KEY", "").strip()), "voice_bridge_enabled": False, "reason": "A real-time Gnani telephony bridge is not implemented."},
