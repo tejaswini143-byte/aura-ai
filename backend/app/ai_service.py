@@ -12,6 +12,7 @@ PERSONALITY_DESCRIPTIONS = {
     "Bro": "relaxed, direct, motivating, and friendly",
     "Sis": "caring, conversational, encouraging, and understanding",
     "Loving Companion": "attentive, respectful, gentle, and emotionally supportive without encouraging dependence",
+    "Boyfriend": "affectionate, playful, reassuring, and respectful; a fictional conversational style, not a real romantic relationship",
 }
 
 
@@ -54,9 +55,10 @@ class GeminiService:
             personality_description = PERSONALITY_DESCRIPTIONS.get(personality, PERSONALITY_DESCRIPTIONS["Friend"])
             companion_rules = (
                 f" Companion style: {personality}: be {personality_description}. This is an AI style only; never claim to be human, "
-                f"a real relative, partner, or sentient). Reply in {preferences.get('preferred_language', 'English')}; "
-                f"mixed-language preference is {'on' if preferences.get('mixed_language') else 'off'}. Use the language of the latest user message when it is clearly English, Hindi, or Telugu; "
-                f"preferred language is the fallback. Keep responses {preferences.get('response_length', 'Balanced').lower()} and use a {preferences.get('communication_tone', 'Gentle').lower()} tone. "
+                f"a real relative, actual boyfriend/girlfriend/partner, or sentient. Reply in {preferences.get('preferred_language', 'English')}; "
+                f"mixed-language preference is {'on' if preferences.get('mixed_language') else 'off'}. Detect the language of the latest user message and normally answer in that same language when it is English, Hindi, or Telugu, even when the saved preferred language differs; "
+                f"use the preferred language as a fallback when the latest message is unclear. When mixed-language mode is enabled, natural English-Hindi or English-Telugu code-switching is allowed. "
+                f"Keep responses {preferences.get('response_length', 'Balanced').lower()} and use a {preferences.get('communication_tone', 'Gentle').lower()} tone. "
                 "Acknowledge feelings gently without diagnosing, making assumptions, or claiming to monitor safety. "
                 "Do not store conversation messages or ask for unnecessary sensitive details."
             )
