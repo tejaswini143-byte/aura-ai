@@ -377,3 +377,18 @@ class TestLanguageAwareFallback(unittest.TestCase):
         from app.main import proactive_calls_switch_on
         with patch.dict(os.environ, {"AURA_PROACTIVE_CALLS_ENABLED": "false", "AURA_OUTBOUND_CALLS_ENABLED": "true"}, clear=False):
             self.assertFalse(proactive_calls_switch_on())
+
+
+class TestLiveDiscoveryRoute(unittest.TestCase):
+    def test_live_route_passes_safe_filters_to_discovery_service(self):
+        from unittest.mock import AsyncMock, patch
+        from starlette.testclient import TestClient
+        payload = {
+            "available": True, "source": "Jobicy", "count": 1,
+            "results": [{"id": "jobicy-1", "title": "Python Intern", "source": "Jobicy"}],
+        }
+        with patch("app.opportunity_discovery.search_live_opportunities", new=AsyncMock(return_value=payload)) as search:
+            response = TestClient(app).get("/api/opportunities/discovery/live?search=intern&location=india&limit=5")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["source"], "Jobicy")
+        search.assert_awaited_once_with(search="intern", location="india", limit=5)
