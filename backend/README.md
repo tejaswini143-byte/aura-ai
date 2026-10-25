@@ -105,7 +105,7 @@ Official API references: [Gnani Quick Start](https://docs.gnani.ai/api/introduct
 ## Deployment verification checklist
 
 1. Deploy the backend from `backend/` with the existing start command and one worker for the SQLite scheduler.
-2. Set `AURA_PUBLIC_BASE_URL` to the backend's public HTTPS URL and configure `NEXT_PUBLIC_AURA_API_URL` on the frontend to the same API origin.
+2. Set `AURA_PUBLIC_BASE_URL` to the backend's public HTTPS URL and configure `NEXT_PUBLIC_AURA_API_URL` on the frontend to that API origin. Include the exact deployed frontend origin in `AURA_ALLOWED_ORIGINS` so browser requests pass CORS checks.
 3. Add backend secrets in the hosting provider's secret/environment settings only. Never put Twilio, Gemini, or Gnani keys in `NEXT_PUBLIC_*`, source code, or Git.
 4. Configure Twilio's voice webhook to `/api/telephony/incoming` (POST) if inbound calling is required. Outbound calls require the saved verified destination, explicit user consent, a valid session/action token, quiet-hour/daily limits, and both server switches.
 5. Verify `/api/health`, `/api/providers/status`, `/api/opportunities/discovery`, and the live discovery endpoint after deployment.
