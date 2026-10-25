@@ -161,11 +161,11 @@ async def run_gnani_bidirectional_bridge(
                     stopped.set()
                     return
 
-        async def speak_reply(text: str, client: httpx.AsyncClient) -> None:
+        async def speak_reply(text: str, client: httpx.AsyncClient, speech_preferences: dict[str, Any]) -> None:
             if not stream_ready.is_set():
                 return
             await twilio_ws.send_json({"event": "clear", "streamSid": stream["stream_sid"]})
-            payload = tts_payload(text, preferences)
+            payload = tts_payload(text, speech_preferences)
             response = await client.post(TTS_URL, headers={"X-API-Key-ID": api_key}, json=payload)
             response.raise_for_status()
             from app.telephony_health import mark_health
@@ -204,7 +204,10 @@ async def run_gnani_bidirectional_bridge(
                         logging.getLogger(__name__).warning("AURA text response failed (%s).", type(exc).__name__)
                         reply = "I heard you. Please give me a moment and try that again."
                     conversation.append({"role": "assistant", "content": reply[:1800]})
-                    await speak_reply(reply, client)
+                    from app.companion import detect_message_language
+                    spoken_language = detect_message_language(transcript, str(preferences.get("preferred_language") or "English"))
+                    reply_preferences = {**preferences, "preferred_language": spoken_language}
+                    await speak_reply(reply, client, reply_preferences)
 
         tasks = (asyncio.create_task(receive_twilio()), asyncio.create_task(receive_transcripts()))
         try:
