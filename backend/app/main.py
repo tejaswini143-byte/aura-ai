@@ -1079,7 +1079,28 @@ def provider_status() -> dict[str, Any]:
             "reason": live["automatic_calls_reason"],
         },
         "dotvoice": {"configured": bool(os.getenv("DOTVOICE_API_KEY", "").strip()), "verified": False, "calls_enabled": False, "reason": "Account permissions and account-specific API access have not been verified."},
-        "gnani": {"configured": bool(os.getenv("GNANI_API_KEY", "").strip()), "voice_bridge_enabled": False, "reason": "A real-time Gnani telephony bridge is not implemented."},
+        "gnani": {
+            "configured": bool(os.getenv("GNANI_API_KEY", "").strip()),
+            "voice_name_configured": bool(os.getenv("GNANI_TTS_VOICE", "").strip()),
+            "bridge_implemented": True,
+            "voice_engine_selected": os.getenv("AURA_VOICE_ENGINE", "gemini_live").strip().lower() == "gnani",
+            "voice_bridge_enabled": (
+                os.getenv("AURA_VOICE_ENGINE", "gemini_live").strip().lower() == "gnani"
+                and bool(os.getenv("GNANI_API_KEY", "").strip())
+                and bool(os.getenv("GNANI_TTS_VOICE", "").strip())
+                and bool(os.getenv("GEMINI_API_KEY", "").strip())
+            ),
+            "reason": (
+                "Gnani Prisma STT and Timbre TTS are selected; a real signed Twilio stream is still required to verify end-to-end voice."
+                if os.getenv("AURA_VOICE_ENGINE", "gemini_live").strip().lower() == "gnani"
+                and os.getenv("GNANI_API_KEY", "").strip()
+                and os.getenv("GNANI_TTS_VOICE", "").strip()
+                and os.getenv("GEMINI_API_KEY", "").strip()
+                else "Configure the Gnani credential, choose a supported Timbre voice, ensure Gemini text access is available, and select the Gnani voice engine."
+            ),
+            "stt_connection_verified": live.get("gnani_stt_connection_verified", False),
+            "tts_connection_verified": live.get("gnani_tts_connection_verified", False),
+        },
         "gemini_live": {
             "credential_present": gemini_credential,
             "model": live_model_name(),
@@ -1220,7 +1241,28 @@ def get_automation_activity(limit: int = 30) -> list[dict[str, Any]]:
 
 @app.get("/api/opportunities/discovery")
 def opportunity_discovery_status() -> dict[str, Any]:
-    return {"available": False, "mode": "saved_records_only", "message": "Live opportunity discovery is not configured. The Radar shows opportunities saved in your AURA database."}
+    return {
+        "available": True,
+        "mode": "jobicy_public_api",
+        "source": "Jobicy",
+        "source_url": "https://jobicy.com/",
+        "message": "Live remote listings are available through Jobicy's public API. Results retain source attribution and link to the original listing; they are not automatically saved to your Radar.",
+        "refresh_policy": "The source feed is cached for one hour.",
+    }
+
+
+@app.get("/api/opportunities/discovery/live")
+async def live_opportunity_discovery(
+    search: str = Query(default="", max_length=100),
+    location: str = Query(default="anywhere", max_length=80),
+    limit: int = Query(default=30, ge=1, le=50),
+) -> dict[str, Any]:
+    from app.opportunity_discovery import search_live_opportunities
+    try:
+        return await search_live_opportunities(search=search, location=location, limit=limit)
+    except Exception as exc:
+        logging.getLogger(__name__).warning("Live opportunity discovery failed (%s).", type(exc).__name__)
+        raise HTTPException(503, "Live opportunity source is temporarily unavailable. Your saved Radar records are unchanged.") from exc
 
 
 # --- LifePilot Task Endpoints ---
@@ -2207,7 +2249,14 @@ async def telephony_media_stream(call_id: str, websocket: WebSocket) -> None:
         return
 
     api_key = os.getenv("GEMINI_API_KEY", "").strip()
-    if not api_key:
+    voice_engine = os.getenv("AURA_VOICE_ENGINE", "gemini_live").strip().lower()
+    if voice_engine not in {"gemini_live", "gnani"}:
+        await websocket.close(code=1008)
+        return
+    if not api_key or (voice_engine == "gnani" and (
+        not os.getenv("GNANI_API_KEY", "").strip()
+        or not os.getenv("GNANI_TTS_VOICE", "").strip()
+    )):
         await websocket.close(code=1011)
         return
     with closing(db()) as conn:
@@ -2222,13 +2271,22 @@ async def telephony_media_stream(call_id: str, websocket: WebSocket) -> None:
     from app.telephony_health import mark_health
     mark_health(wss_handshake_at=datetime.now(timezone.utc).isoformat(), last_error=None)
     try:
-        async with open_gemini_live_session(
-            api_key=api_key,
-            system_instruction=_call_live_system_instruction(call["purpose"], preferences),
-        ) as session:
-            mark_health(gemini_live_at=datetime.now(timezone.utc).isoformat(), last_error=None)
-            await session.send_realtime_input(text="Greet the person briefly and invite them to share how they are doing.")
-            await run_bidirectional_bridge(websocket, session, expected_call_sid=call["twilio_sid"] or "", expected_call_id=call_id)
+        if voice_engine == "gnani":
+            from app.gnani_bridge import run_gnani_bidirectional_bridge
+            await run_gnani_bidirectional_bridge(
+                websocket,
+                expected_call_sid=call["twilio_sid"] or "",
+                expected_call_id=call_id,
+                preferences=preferences,
+            )
+        else:
+            async with open_gemini_live_session(
+                api_key=api_key,
+                system_instruction=_call_live_system_instruction(call["purpose"], preferences),
+            ) as session:
+                mark_health(gemini_live_at=datetime.now(timezone.utc).isoformat(), last_error=None)
+                await session.send_realtime_input(text="Greet the person briefly and invite them to share how they are doing.")
+                await run_bidirectional_bridge(websocket, session, expected_call_sid=call["twilio_sid"] or "", expected_call_id=call_id)
         await websocket.close(code=1000)
     except WebSocketDisconnect:
         pass

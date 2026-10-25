@@ -33,15 +33,21 @@ def init_health_table() -> None:
                 inbound_webhook_at TEXT,
                 wss_handshake_at TEXT,
                 gemini_live_at TEXT,
+                gnani_stt_at TEXT,
+                gnani_tts_at TEXT,
                 last_error TEXT
             )
         """)
+        columns = {column[1] for column in conn.execute("PRAGMA table_info(telephony_health)").fetchall()}
+        for name in ("gnani_stt_at", "gnani_tts_at"):
+            if name not in columns:
+                conn.execute(f"ALTER TABLE telephony_health ADD COLUMN {name} TEXT")
         conn.execute("INSERT OR IGNORE INTO telephony_health(id) VALUES (1)")
         conn.commit()
 
 
 def mark_health(**fields: str | None) -> None:
-    allowed = {"inbound_webhook_at", "wss_handshake_at", "gemini_live_at", "last_error"}
+    allowed = {"inbound_webhook_at", "wss_handshake_at", "gemini_live_at", "gnani_stt_at", "gnani_tts_at", "last_error"}
     if not fields or not set(fields).issubset(allowed):
         raise ValueError("Unsupported telephony health field")
     init_health_table()
@@ -144,6 +150,10 @@ def telephony_status() -> dict[str, Any]:
         "live_wss_last_connected_at": health.get("wss_handshake_at"),
         "gemini_live_access_verified": bool(health.get("gemini_live_at")),
         "gemini_live_last_connected_at": health.get("gemini_live_at"),
+        "gnani_stt_connection_verified": bool(health.get("gnani_stt_at")),
+        "gnani_stt_last_connected_at": health.get("gnani_stt_at"),
+        "gnani_tts_connection_verified": bool(health.get("gnani_tts_at")),
+        "gnani_tts_last_connected_at": health.get("gnani_tts_at"),
         "voice_bridge_implemented": True,
         "last_telephony_error": health.get("last_error"),
         "destination_verification_available": verification_available,
