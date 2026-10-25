@@ -347,7 +347,7 @@ class TestCompanionImprovements(unittest.TestCase):
         self.assertIn("fictional", PERSONALITY_DESCRIPTIONS["Boyfriend"])
         self.assertIn("never claim to be human", prompt)
         self.assertIn("language of the latest user message", prompt)
-        self.assertIn("mixed-language mode is on", prompt)
+        self.assertIn("mixed-language preference is on", prompt)
 
     def test_romanized_telugu_mood_detection(self):
         from app.companion import detect_mood
