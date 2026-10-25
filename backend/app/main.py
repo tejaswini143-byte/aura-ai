@@ -867,6 +867,8 @@ def put_companion_preferences(payload: CompanionPreferencesIn, request: Request)
         if values["automatic_mood_calls"] or values["reminder_calls_enabled"]:
             if not saved_phone or not stored_phone_consent or not phone_verified:
                 raise HTTPException(422, "Automatic calls require a saved, verified destination number with storage consent. Verify the number before enabling them.")
+            if phone:
+                raise HTTPException(422, "Save and verify the destination number first, then enable automatic calls in a separate Settings save.")
         consent_at = (prior["calling_consent_at"] if prior["calling_consent"] else timestamp) if values["calling_consent"] else None
         conn.execute("""UPDATE companion_preferences SET preferred_language=?, mixed_language=?, personality=?, response_length=?, communication_tone=?,
             voice_preference=?, calling_consent=?, calling_consent_at=?, quiet_hours_start=?, quiet_hours_end=?,
