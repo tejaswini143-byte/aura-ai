@@ -1052,25 +1052,40 @@ def check_phone_verification(payload: PhoneVerificationCheck, request: Request) 
 
 @app.get("/api/providers/status")
 def provider_status() -> dict[str, Any]:
+    """Return configuration and real observed telephony health separately."""
+    from app.telephony_health import telephony_status
+
+    live = telephony_status()
+    gemini_credential = bool(os.getenv("GEMINI_API_KEY", "").strip())
     twilio_configured = all(bool(os.getenv(key, "").strip()) for key in ("TWILIO_ACCOUNT_SID", "TWILIO_AUTH_TOKEN", "TWILIO_FROM_NUMBER")) and PUBLIC_BASE_URL.startswith("https://")
-    with closing(db()) as conn:
-        prefs_row = conn.execute("SELECT calling_consent, phone_verified, destination_phone FROM companion_preferences WHERE id=1").fetchone()
-    gemini_live_credential_present = bool(os.getenv("GEMINI_API_KEY", "").strip())
-    verification_available = bool(
-        os.getenv("AURA_PHONE_VERIFICATION_ENABLED", "false").strip().lower() == "true"
-        and os.getenv("TWILIO_VERIFY_SERVICE_SID", "").strip()
-        and admin_password_configured()
-        and os.getenv("TWILIO_ACCOUNT_SID", "").strip()
-        and os.getenv("TWILIO_AUTH_TOKEN", "").strip()
-    )
-    action_auth_ready = admin_password_configured()
-    manual_ready = bool(outbound_calls_enabled() and action_auth_ready and twilio_configured and gemini_live_credential_present and prefs_row["calling_consent"] and prefs_row["phone_verified"] and prefs_row["destination_phone"])
     return {
-        "gemini": {"configured": bool(os.getenv("GEMINI_API_KEY", "").strip()), "purpose": "text chat"},
-        "twilio": {"configured": twilio_configured, "manual_call_route": "/api/calls", "manual_calls_enabled": manual_ready, "automatic_calls_enabled": False, "destination_verification_available": verification_available, "reason": "Manual calls require the server master switch, Twilio credentials, HTTPS callbacks, a Gemini API key, explicit consent, and a verified saved destination. Automatic calls are not implemented."},
-        "dotvoice": {"configured": bool(os.getenv("DOTVOICE_API_KEY", "").strip()), "verified": False, "calls_enabled": False, "reason": "Account permissions and current account-specific API documentation have not been verified."},
-        "gnani": {"configured": bool(os.getenv("GNANI_API_KEY", "").strip()), "voice_bridge_enabled": False, "reason": "A real-time telephony audio bridge is not implemented."},
-        "gemini_live": {"credential_present": gemini_live_credential_present, "model": live_model_name(), "access_verified": False, "bridge_implemented": True, "voice_bridge_enabled": False, "reason": "The Twilio-to-Gemini Live audio bridge is implemented, but model access and a public WSS connection have not been verified."},
+        "gemini": {"configured": gemini_credential, "purpose": "text chat"},
+        "twilio": {
+            "configured": twilio_configured,
+            "manual_call_route": live["manual_call_route"],
+            "manual_calls_enabled": live["manual_calls_enabled"],
+            "automatic_calls_enabled": live["automatic_calls_enabled"],
+            "automatic_calls_configured": live["automatic_calls_configured"],
+            "incoming_webhook_configured": live["incoming_webhook_configured"],
+            "incoming_webhook_expected_url": live["incoming_webhook_expected_url"],
+            "incoming_webhook_last_received_at": live["incoming_webhook_last_received_at"],
+            "incoming_webhook_check_error": live["incoming_webhook_check_error"],
+            "destination_verification_available": live["destination_verification_available"],
+            "reason": "Manual calls require the server switch, admin authentication, Twilio credentials, explicit calling consent, and a verified saved destination. Automatic dispatch remains off until a tested scheduler is connected.",
+        },
+        "dotvoice": {"configured": bool(os.getenv("DOTVOICE_API_KEY", "").strip()), "verified": False, "calls_enabled": False, "reason": "Account permissions and account-specific API access have not been verified."},
+        "gnani": {"configured": bool(os.getenv("GNANI_API_KEY", "").strip()), "voice_bridge_enabled": False, "reason": "A real-time Gnani telephony bridge is not implemented."},
+        "gemini_live": {
+            "credential_present": gemini_credential,
+            "model": live_model_name(),
+            "access_verified": live["gemini_live_access_verified"],
+            "bridge_implemented": live["voice_bridge_implemented"],
+            "voice_bridge_enabled": live["live_wss_connection_verified"] and live["gemini_live_access_verified"],
+            "live_wss_connection_verified": live["live_wss_connection_verified"],
+            "last_connected_at": live["gemini_live_last_connected_at"],
+            "reason": "Live access and WSS are verified only after a real Twilio-signed stream successfully opens a Gemini Live session." if not (live["live_wss_connection_verified"] and live["gemini_live_access_verified"]) else "A real Twilio WSS stream and Gemini Live session have connected successfully.",
+        },
+        "telephony_diagnostics": live,
     }
 
 
@@ -2058,11 +2073,14 @@ async def telephony_media_stream(call_id: str, websocket: WebSocket) -> None:
 
     preferences = public_preferences(prefs_row)
     await websocket.accept()
+    from app.telephony_health import mark_health
+    mark_health(wss_handshake_at=datetime.now(timezone.utc).isoformat(), last_error=None)
     try:
         async with open_gemini_live_session(
             api_key=api_key,
             system_instruction=_call_live_system_instruction(call["purpose"], preferences),
         ) as session:
+            mark_health(gemini_live_at=datetime.now(timezone.utc).isoformat(), last_error=None)
             await session.send_realtime_input(text="Greet the person briefly and invite them to share how they are doing.")
             await run_bidirectional_bridge(websocket, session, expected_call_sid=call["twilio_sid"] or "", expected_call_id=call_id)
         await websocket.close(code=1000)
@@ -2129,3 +2147,8 @@ async def call_status(call_id: str, request: Request) -> dict[str, str]:
         conn.commit()
     actual_status = saved_call["status"] if normalized == "unknown" or stale_terminal_event else normalized
     return {"ok": "true", "status": actual_status}
+
+
+# Register the signed inbound Twilio webhook after the app and DB are initialized.
+from app.telephony_health import router as telephony_health_router  # noqa: E402
+app.include_router(telephony_health_router)
