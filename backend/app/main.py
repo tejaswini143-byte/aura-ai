@@ -24,7 +24,7 @@ from twilio.request_validator import RequestValidator
 from twilio.twiml.voice_response import VoiceResponse, Gather
 from app.ai_service import (GeminiService, GeminiConfigurationError, GeminiCredentialError, GeminiProviderError, PERSONALITY_DESCRIPTIONS)
 from app.automation import AutomationService, AutomationScheduler
-from app.companion import detect_mood, immediate_safety_response, fallback_companion_reply, masked_phone
+from app.companion import detect_mood, detect_message_language, immediate_safety_response, fallback_companion_reply, masked_phone
 from app.companion import public_preferences
 from app.voice_bridge import (
     live_model_name,
