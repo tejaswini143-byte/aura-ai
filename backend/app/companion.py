@@ -19,13 +19,15 @@ RISK_TERMS = (
 def detect_mood(message: str) -> str | None:
     text = re.sub(r"[^\w\s]", " ", message.casefold())
     text = re.sub(r"\s+", " ", text).strip()
+    # Match the complete normalized phrase first; the Telugu/Hindi scripts use
+    # word boundaries too, but many natural variants are best matched by phrase
+    # containment after punctuation and whitespace normalization.
     for mood, terms in MOOD_TERMS.items():
         for term in terms:
             normalized = re.sub(r"\s+", " ", term.casefold()).strip()
-            if re.search(rf"(?<!\w){re.escape(normalized)}(?!\w)", text):
+            if normalized and normalized in text:
                 return mood
     return None
-
 
 def immediate_safety_response(message: str) -> str | None:
     text = re.sub(r"\s+", " ", message.casefold())
