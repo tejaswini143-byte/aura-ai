@@ -121,6 +121,9 @@ async def run_gnani_bidirectional_bridge(
             raise RuntimeError("Gnani STT returned an invalid connection event.") from exc
         if connected.get("type") != "connected":
             raise RuntimeError("Gnani STT did not confirm a ready session.")
+        from app.telephony_health import mark_health
+        from datetime import datetime, timezone
+        mark_health(gnani_stt_at=datetime.now(timezone.utc).isoformat(), last_error=None)
 
         async def receive_twilio() -> None:
             while not stopped.is_set():
@@ -165,6 +168,9 @@ async def run_gnani_bidirectional_bridge(
             payload = tts_payload(text, preferences)
             response = await client.post(TTS_URL, headers={"X-API-Key-ID": api_key}, json=payload)
             response.raise_for_status()
+            from app.telephony_health import mark_health
+            from datetime import datetime, timezone
+            mark_health(gnani_tts_at=datetime.now(timezone.utc).isoformat(), last_error=None)
             audio = response.content
             if not audio:
                 raise RuntimeError("Gnani TTS returned empty audio.")
