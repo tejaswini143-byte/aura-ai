@@ -332,3 +332,31 @@ class TestAuraBackend(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestCompanionImprovements(unittest.TestCase):
+    def test_boyfriend_style_is_supported_as_fictional_persona(self):
+        from app.ai_service import PERSONALITY_DESCRIPTIONS, GeminiService
+        self.assertIn("Boyfriend", PERSONALITY_DESCRIPTIONS)
+        prompt = GeminiService.build_prompt(
+            [{"role": "user", "content": "Naku chala baadha ga undi"}],
+            [], [],
+            {"personality": "Boyfriend", "preferred_language": "English", "mixed_language": True,
+             "response_length": "Balanced", "communication_tone": "Gentle"},
+        )
+        self.assertIn("fictional", PERSONALITY_DESCRIPTIONS["Boyfriend"])
+        self.assertIn("never claim to be human", prompt)
+        self.assertIn("language of the latest user message", prompt)
+        self.assertIn("mixed-language mode is on", prompt)
+
+    def test_romanized_telugu_mood_detection(self):
+        from app.companion import detect_mood
+        self.assertEqual(detect_mood("Naku chala baadha ga undi"), "sad")
+        self.assertEqual(detect_mood("Nenu ontariga unna"), "lonely")
+        self.assertEqual(detect_mood("Naaku tension ga undi"), "anxious")
+        self.assertEqual(detect_mood("I am happy today"), "happy")
+
+    def test_boyfriend_preference_is_accepted(self):
+        from app.main import CompanionPreferencesIn
+        payload = CompanionPreferencesIn(personality="Boyfriend")
+        self.assertEqual(payload.personality, "Boyfriend")

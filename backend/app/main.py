@@ -433,8 +433,8 @@ class CompanionPreferencesIn(BaseModel):
     @field_validator("personality")
     @classmethod
     def valid_personality(cls, value: str) -> str:
-        if value not in {"Friend", "Bro", "Sis", "Mother", "Father", "Loving Companion"}:
-            raise ValueError("Choose one of the listed companion styles.")
+        if value not in {"Friend", "Bro", "Sis", "Mother", "Father", "Loving Companion", "Boyfriend"}:
+            raise ValueError("Choose Friend, Bro, Sis, Mother, Father, Loving Companion, or Boyfriend.")
         return value
 
     @field_validator("response_length")
@@ -1109,7 +1109,7 @@ async def companion_chat(payload: CompanionChatIn) -> dict[str, Any]:
     return {"reply": reply, "provider": provider, "mood": mood,
             "conversation_saved": False, "automatic_call_triggered": False,
             "call_offer": False,
-            "call_unavailable_reason": "Phone check-ins are not available until a verified-number workflow and a realtime voice bridge are implemented." if mood in {"sad", "lonely", "anxious", "stressed"} else None}
+            "call_unavailable_reason": "AURA recognized the mood, but it will not place an automatic call. Mood-triggered call dispatch is not implemented; use the existing in-app support flow. If you need immediate human support, contact someone you trust." if mood in {"sad", "lonely", "anxious", "stressed"} else None}
 
 
 @app.get("/api/automation/settings")
