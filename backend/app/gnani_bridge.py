@@ -61,6 +61,23 @@ def mulaw8k_to_pcm16(payload: bytes) -> bytes:
     return bytes(output)
 
 
+def raw_wave_data(payload: bytes) -> bytes:
+    """Strip a RIFF/WAVE container if a provider returns one despite raw mu-law config."""
+    if not payload.startswith(b"RIFF") or payload[8:12] != b"WAVE":
+        return payload
+    offset = 12
+    while offset + 8 <= len(payload):
+        chunk_id = payload[offset:offset + 4]
+        size = int.from_bytes(payload[offset + 4:offset + 8], "little")
+        start, end = offset + 8, offset + 8 + size
+        if end > len(payload):
+            raise ValueError("Gnani returned a truncated WAV payload.")
+        if chunk_id == b"data":
+            return payload[start:end]
+        offset = end + (size % 2)
+    raise ValueError("Gnani returned a WAV container without an audio data chunk.")
+
+
 def _is_supported_twilio_start(message: dict[str, Any], expected_call_sid: str, expected_call_id: str) -> tuple[str, str]:
     start = message.get("start") or {}
     media_format = start.get("mediaFormat") or {}
@@ -171,7 +188,7 @@ async def run_gnani_bidirectional_bridge(
             from app.telephony_health import mark_health
             from datetime import datetime, timezone
             mark_health(gnani_tts_at=datetime.now(timezone.utc).isoformat(), last_error=None)
-            audio = response.content
+            audio = raw_wave_data(response.content)
             if not audio:
                 raise RuntimeError("Gnani TTS returned empty audio.")
             # The requested raw G.711 mu-law container is exactly what Twilio expects.
