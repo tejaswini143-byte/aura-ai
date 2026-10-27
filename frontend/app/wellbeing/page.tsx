@@ -5,7 +5,7 @@ import { api } from "../api";
 
 const prompts = ["What’s one thing you’re glad you did today?", "What would feel supportive right now?", "What is one small thing you’d like to focus on?"];
 type ChatMessage = { role: "user" | "assistant"; content: string };
-type CompanionResponse = { reply: string; provider: "gemini" | "fallback" | "safety_fallback"; mood: string | null; conversation_saved: boolean; automatic_call_triggered: boolean; call_offer: boolean; call_offer_text?: string | null; call_unavailable_reason?: string | null };
+type CompanionResponse = { reply: string; provider: "gemini" | "fallback" | "safety_fallback"; mood: string | null; conversation_saved: boolean; automatic_call_triggered: boolean; automatic_call_status?: string | null; call_offer: boolean; call_offer_text?: string | null; call_unavailable_reason?: string | null };
 
 export default function Wellbeing() {
   const [mood, setMood] = useState("");
@@ -69,7 +69,7 @@ export default function Wellbeing() {
       <div className="section-head"><div><span className="eyebrow">PRIVATE, EPHEMERAL CHAT</span><h2>Talk with AURA</h2></div></div>
       <p className="muted">Share what is on your mind. This chat is not stored by the backend. AURA is an AI, not a clinician or emergency service.</p>
       {messages.length > 0 && <div className="chat-messages" aria-live="polite">{messages.map((message, index) => <article className={`chat-message ${message.role}`} key={index}><b>{message.role === "user" ? "You" : "AURA · AI companion"}</b><p>{message.content}</p></article>)}{busy && <p className="muted" role="status">AURA is replying…</p>}</div>}
-      {companionResult && <div className="notice-banner" role="status"><b>{companionResult.provider === "gemini" ? "Gemini response" : companionResult.provider === "safety_fallback" ? "Support guidance" : "Supportive fallback"}</b><span>{companionResult.conversation_saved ? "Conversation saved" : "Conversation not saved"}. No automatic call was triggered.{companionResult.mood ? ` Best-effort mood cue: ${companionResult.mood}.` : ""}</span>{companionResult.call_unavailable_reason && <span>{companionResult.call_unavailable_reason}</span>}</div>}
+      {companionResult && <div className="notice-banner" role="status"><b>{companionResult.provider === "gemini" ? "Gemini response" : companionResult.provider === "safety_fallback" ? "Support guidance" : "Supportive fallback"}</b><span>{companionResult.conversation_saved ? "Conversation saved" : "Conversation not saved"}. {companionResult.automatic_call_triggered ? `AURA submitted a call request (${companionResult.automatic_call_status || "submitted"}); this does not confirm an answer or working live audio.` : "No automatic call was triggered."}{companionResult.mood ? ` Best-effort mood cue: ${companionResult.mood}.` : ""}</span>{companionResult.call_unavailable_reason && <span>{companionResult.call_unavailable_reason}</span>}</div>}
       {error && <p role="alert" className="inline-error">{error} Edit the message if needed, then press Send to retry.</p>}
       <form className="chat-composer" onSubmit={sendToCompanion}><label className="sr-only" htmlFor="wellbeing-companion-input">Message AURA</label><textarea id="wellbeing-companion-input" value={input} onChange={e => setInput(e.target.value)} maxLength={4000} rows={2} placeholder="I feel low today…"/><button disabled={busy || !input.trim()}>{busy ? "Sending…" : "Send"}</button></form>
     </section>
