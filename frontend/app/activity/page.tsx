@@ -1,10 +1,11 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
-import { api } from "../api";
+import { api, setCsrfToken } from "../api";
 import { useAura } from "../components/AuraProvider";
 
-type ProviderStatus = { twilio: { configured: boolean; manual_calls_enabled: boolean; reason: string }; gemini_live: { voice_bridge_enabled: boolean; reason: string } };
+type ProviderStatus = { twilio: { configured: boolean; manual_calls_enabled: boolean; reason: string }; gemini_live: { credential_present: boolean; access_verified: boolean; voice_bridge_enabled: boolean; model?: string; reason: string } };
+type AuthSession = { authenticated: boolean; configured: boolean; csrf_token: string | null; message?: string };
 
 export default function Activity() {
   const { calls, loading, run, notice } = useAura();
@@ -14,14 +15,43 @@ export default function Activity() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [providers, setProviders] = useState<ProviderStatus | null>(null);
+  const [authLoading, setAuthLoading] = useState(true);
+  const [adminConfigured, setAdminConfigured] = useState<boolean | null>(null);
+  const [authenticated, setAuthenticated] = useState(false);
+  const [adminPassword, setAdminPassword] = useState("");
 
   useEffect(() => {
     api<ProviderStatus>("/api/providers/status").then(setProviders).catch(e => setError(e instanceof Error ? e.message : "Provider status is unavailable"));
+    api<AuthSession>("/api/auth/session").then(session => {
+      setAdminConfigured(session.configured);
+      setAuthenticated(session.authenticated);
+      setCsrfToken(session.csrf_token);
+    }).catch(e => setError(e instanceof Error ? e.message : "Could not check admin session"))
+      .finally(() => setAuthLoading(false));
   }, []);
+
+  async function signIn(event: FormEvent) {
+    event.preventDefault();
+    setError("");
+    try {
+      const password = adminPassword;
+      setAdminPassword("");
+      const session = await api<AuthSession>("/api/auth/login", { method: "POST", body: JSON.stringify({ password }) });
+      setCsrfToken(session.csrf_token);
+      setAuthenticated(session.authenticated);
+      setAdminConfigured(true);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Sign-in failed.");
+    }
+  }
 
   async function call(event: FormEvent) {
     event.preventDefault();
     setError("");
+    if (!authenticated) {
+      setError("Sign in to AURA Settings before requesting a call.");
+      return;
+    }
     if (!providers?.twilio.manual_calls_enabled) {
       setError("Calling is disabled until backend configuration, explicit consent, and a verified destination are ready.");
       return;
@@ -38,19 +68,24 @@ export default function Activity() {
     } finally { setBusy(false); }
   }
 
-  const callsEnabled = Boolean(providers?.twilio.manual_calls_enabled);
+  const callsEnabled = Boolean(authenticated && providers?.twilio.manual_calls_enabled);
   return <>
     <section className="panel call-panel">
-      <div className="section-head"><div><span className="eyebrow">CONSENT-BASED CHECK-IN</span><h2>Request a call</h2></div><span className="status-tag">Twilio prototype · no live AI audio</span></div>
-      <p className="muted">Calls use the existing Twilio speech-capture prototype. AURA does not have an interactive Gemini voice bridge yet.</p>
+      <div className="section-head"><div><span className="eyebrow">CONSENT-BASED CHECK-IN</span><h2>Request a call</h2></div><span className="status-tag">{providers?.gemini_live.voice_bridge_enabled ? "Gemini Live verified" : "Live voice awaiting connection test"}</span></div>
+      <p className="muted">AURA is configured to use a bidirectional Gemini Live voice stream. Real-time speech is confirmed only after a call successfully opens the signed Twilio WebSocket and Gemini Live session.</p>
       {!providers ? <p className="muted" role="status">Checking call readiness…</p> : <div className="notice-banner"><b>{callsEnabled ? "Manual call configuration is present" : "Calls are currently disabled"}</b><span>{providers.twilio.reason}</span><span>{providers.gemini_live.reason}</span></div>}
-      <form className="form-grid" onSubmit={call}>
+      {authLoading ? <p className="muted" role="status">Checking secure admin session…</p>
+        : adminConfigured === false ? <p className="fine-print">Admin access is not configured. Set AURA_ADMIN_PASSWORD (at least 16 characters) on the backend.</p>
+        : !authenticated ? <form className="form-grid" onSubmit={signIn}>
+          <label className="wide">AURA admin password<input type="password" value={adminPassword} onChange={e => setAdminPassword(e.target.value)} autoComplete="current-password" required /></label>
+          <div className="wide"><button disabled={!adminPassword}>Sign in to request a call</button></div>
+        </form> : <form className="form-grid" onSubmit={call}>
         <label>Verified phone number (E.164)<input value={phone} onChange={e => setPhone(e.target.value)} placeholder="+919876543210" required autoComplete="tel" /></label>
         <label>Purpose<input value={purpose} onChange={e => setPurpose(e.target.value)} required /></label>
         <label className="wide checkbox"><input type="checkbox" checked={consent} onChange={e => setConsent(e.target.checked)} /><span>I confirm that the recipient explicitly agreed to receive this call.</span></label>
         <div className="wide"><button disabled={busy || !consent || !callsEnabled}>{busy ? "Submitting…" : "Confirm and request call"}</button></div>
-      </form>
-      <p className="fine-print">An explicit browser confirmation is required. The backend also requires its call-enable switch and a verified saved number. This project currently has no phone-verification flow, so calls remain blocked.</p>
+      </form>}
+      <p className="fine-print">Each manual call requires your explicit confirmation, calling consent in Settings, and the same verified phone number saved there. Calls may incur charges. A configured model is not proof of a successful live conversation.</p>
       {error && <p className="inline-error" role="alert">{error}</p>}
     </section>
     <section className="panel">
