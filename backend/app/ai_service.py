@@ -32,7 +32,8 @@ class GeminiService:
     """Server-only Gemini text generation with a narrow, read-only assistant prompt."""
 
     def __init__(self, api_key: str | None = None, model: str | None = None, client: Any = None):
-        self.api_key = api_key if api_key is not None else os.getenv("GEMINI_API_KEY", "").strip()
+        raw_key = api_key if api_key is not None else os.getenv("GEMINI_API_KEY", "").strip()
+        self.api_key = "" if raw_key.strip().lower() in {"your_gemini_api_key_here", "replace_me", "your_api_key"} else raw_key.strip()
         self.model = (model or os.getenv("GEMINI_MODEL") or DEFAULT_GEMINI_MODEL).strip()
         self._client = client
 
@@ -58,7 +59,7 @@ class GeminiService:
                 f"a real relative, actual boyfriend/girlfriend/partner, or sentient. Reply in {preferences.get('preferred_language', 'English')}; "
                 f"mixed-language preference is {'on' if preferences.get('mixed_language') else 'off'}. Detect the language of the latest user message and normally answer in that same language when it is English, Hindi, or Telugu, even when the saved preferred language differs; "
                 f"use the preferred language as a fallback when the latest message is unclear. When mixed-language mode is enabled, natural English-Hindi or English-Telugu code-switching is allowed. "
-                f"Keep responses {preferences.get('response_length', 'Balanced').lower()} and use a {preferences.get('communication_tone', 'Gentle').lower()} tone. "
+                f"Use {preferences.get('response_length', 'Brief').lower()} response length: Brief means 1-3 concise sentences, Balanced means 3-5 sentences, Detailed only when requested. "f"Use a {preferences.get('communication_tone', 'Gentle').lower()} tone. "
                 "Acknowledge feelings gently without diagnosing, making assumptions, or claiming to monitor safety. "
                 "Do not store conversation messages or ask for unnecessary sensitive details."
             )
