@@ -89,6 +89,122 @@ async def incoming_voice_webhook(request: Request) -> Response:
         raise HTTPException(502, "The inbound voice webhook could not create a live call.") from exc
 
 
+
+@router.post("/api/telephony/configure-incoming-webhook")
+def configure_incoming_webhook(request: Request) -> dict[str, Any]:
+    """Point the configured Twilio number at AURA's signed inbound voice webhook."""
+    main = _main()
+    main.require_action_authorization(request)
+    required = ("TWILIO_ACCOUNT_SID", "TWILIO_AUTH_TOKEN", "TWILIO_FROM_NUMBER")
+    if any(not os.getenv(key, "").strip() for key in required):
+        raise HTTPException(503, "Twilio account credentials and caller ID must be configured first.")
+    if not main.PUBLIC_BASE_URL.startswith("https://"):
+        raise HTTPException(503, "AURA_PUBLIC_BASE_URL must be a public HTTPS URL before configuring Twilio.")
+    expected_url = main.public_https_url("/api/telephony/incoming")
+    try:
+        client = TwilioClient(os.environ["TWILIO_ACCOUNT_SID"], os.environ["TWILIO_AUTH_TOKEN"])
+        phone_number = os.environ["TWILIO_FROM_NUMBER"].strip()
+        numbers = client.incoming_phone_numbers.list(phone_number=phone_number, limit=5)
+        number = next((item for item in numbers if getattr(item, "phone_number", None) == phone_number), None)
+        if number is None:
+            raise HTTPException(404, "The configured Twilio caller ID was not found as an incoming phone number in this account.")
+        updated = number.update(voice_url=expected_url, voice_method="POST")
+        configured = (
+            (getattr(updated, "voice_url", "") or "").rstrip("/") == expected_url.rstrip("/")
+            and (getattr(updated, "voice_method", "POST") or "POST").upper() == "POST"
+        )
+        if not configured:
+            raise HTTPException(502, "Twilio did not confirm the requested incoming webhook configuration.")
+        return {"ok": True, "incoming_webhook_configured": True, "url": expected_url, "method": "POST"}
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.warning("Twilio incoming webhook configuration failed (%s).", type(exc).__name__)
+        raise HTTPException(502, "Twilio could not update the incoming voice webhook. Check the Twilio number's voice permissions.") from exc
+
+
+@router.post("/api/providers/gnani/test")
+async def test_gnani_connections(request: Request) -> dict[str, Any]:
+    """Verify real Gnani STT handshake and TTS audio for Telugu, Hindi and English."""
+    main = _main()
+    main.require_action_authorization(request)
+    api_key = os.getenv("GNANI_API_KEY", "").strip()
+    if not api_key:
+        raise HTTPException(503, "GNANI_API_KEY is missing from the backend environment.")
+    if main.selected_voice_engine() != "gnani":
+        raise HTTPException(409, "Select Gnani as AURA_VOICE_ENGINE before running this test.")
+
+    import asyncio
+    import httpx
+    import websockets
+    from app.gnani_bridge import STT_URL, TTS_URL, raw_wave_data, tts_payload
+
+    result: dict[str, Any] = {"stt": {"ok": False}, "tts": {}, "ok": False}
+    try:
+        headers = {
+            "x-api-key-id": api_key,
+            "lang_code": os.getenv("GNANI_LANGUAGE", "te-IN").strip() or "te-IN",
+            "x-sample-rate": "8000",
+            "x-format": "transcribe",
+        }
+        async with websockets.connect(
+            STT_URL,
+            additional_headers=headers,
+            open_timeout=12,
+            close_timeout=3,
+            ping_interval=20,
+            max_size=1_000_000,
+        ) as stt:
+            raw_event = await asyncio.wait_for(stt.recv(), timeout=12)
+            event = json.loads(raw_event)
+            if event.get("type") != "connected":
+                raise RuntimeError("STT did not return a connected event")
+        mark_health(gnani_stt_at=now_iso(), last_error=None)
+        result["stt"] = {"ok": True, "sample_rate": 8000, "format": "PCM16 mono"}
+    except Exception as exc:
+        logger.warning("Gnani STT connection test failed (%s).", type(exc).__name__)
+        result["stt"] = {"ok": False, "error": type(exc).__name__}
+
+    async with httpx.AsyncClient(timeout=25.0) as client:
+        for language, locale, sample_text in (
+            ("telugu", "te-IN", "నమస్కారం. ఇది ఆరా వాయిస్ పరీక్ష."),
+            ("hindi", "hi-IN", "नमस्ते। यह आरा की आवाज़ की जाँच है।"),
+            ("english", "en-IN", "Hello. This is an AURA voice test."),
+        ):
+            preferences = {"preferred_language": language}
+            try:
+                payload = tts_payload(sample_text, preferences)
+                response = await client.post(
+                    TTS_URL,
+                    headers={"X-API-Key-ID": api_key, "Content-Type": "application/json"},
+                    json=payload,
+                )
+                response.raise_for_status()
+                audio = raw_wave_data(response.content)
+                if not audio:
+                    raise RuntimeError("TTS returned empty audio")
+                mark_health(gnani_tts_at=now_iso(), last_error=None)
+                result["tts"][locale] = {
+                    "ok": True,
+                    "voice": payload["voice"],
+                    "audio_bytes": len(audio),
+                    "format": "8 kHz G.711 mu-law",
+                }
+            except Exception as exc:
+                logger.warning("Gnani TTS test failed for %s (%s).", locale, type(exc).__name__)
+                result["tts"][locale] = {"ok": False, "error": type(exc).__name__}
+
+    result["ok"] = bool(result["stt"]["ok"] and all(item.get("ok") for item in result["tts"].values()) and len(result["tts"]) == 3)
+    if not result["ok"]:
+        try:
+            mark_health(last_error="gnani_connection_test_failed")
+        except Exception:
+            pass
+        result["message"] = "Gnani test completed with one or more failures. Review the STT and language-specific TTS results."
+    else:
+        result["message"] = "Gnani STT and Telugu, Hindi, and English TTS connections all passed."
+    return result
+
 def telephony_status() -> dict[str, Any]:
     """Check configured Twilio webhook and report only observed live connections as verified."""
     main = _main()
