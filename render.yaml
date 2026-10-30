@@ -17,6 +17,8 @@ services:
         value: production
       - key: DATABASE_PATH
         value: /tmp/aura.db
+      - key: AURA_PUBLIC_BASE_URL
+        value: https://aura-ai-1-a83b.onrender.com
       - key: AURA_OUTBOUND_CALLS_ENABLED
         value: "false"
       - key: AURA_PROACTIVE_CALLS_ENABLED
@@ -32,7 +34,7 @@ services:
       - key: GNANI_LANGUAGE
         value: te-IN
       - key: AURA_VOICE_ENGINE
-        value: gnani
+        value: gemini_live
       - key: AURA_ADMIN_PASSWORD
         generateValue: true
       - key: AURA_ACTIONS_API_TOKEN
