@@ -141,6 +141,7 @@ async def test_gnani_connections(request: Request) -> dict[str, Any]:
     from app.gnani_bridge import STT_URL, TTS_URL, raw_wave_data, tts_payload
 
     result: dict[str, Any] = {"stt": {"ok": False}, "tts": {}, "ok": False}
+    mark_health(gnani_stt_at=None, gnani_tts_at=None, last_error=None)
     try:
         headers = {
             "x-api-key-id": api_key,
@@ -184,7 +185,6 @@ async def test_gnani_connections(request: Request) -> dict[str, Any]:
                 audio = raw_wave_data(response.content)
                 if not audio:
                     raise RuntimeError("TTS returned empty audio")
-                mark_health(gnani_tts_at=now_iso(), last_error=None)
                 result["tts"][locale] = {
                     "ok": True,
                     "voice": payload["voice"],
@@ -195,7 +195,10 @@ async def test_gnani_connections(request: Request) -> dict[str, Any]:
                 logger.warning("Gnani TTS test failed for %s (%s).", locale, type(exc).__name__)
                 result["tts"][locale] = {"ok": False, "error": type(exc).__name__}
 
-    result["ok"] = bool(result["stt"]["ok"] and all(item.get("ok") for item in result["tts"].values()) and len(result["tts"]) == 3)
+    tts_all_ok = bool(all(item.get("ok") for item in result["tts"].values()) and len(result["tts"]) == 3)
+    if tts_all_ok:
+        mark_health(gnani_tts_at=now_iso(), last_error=None)
+    result["ok"] = bool(result["stt"]["ok"] and tts_all_ok)
     if not result["ok"]:
         try:
             mark_health(last_error="gnani_connection_test_failed")
@@ -236,8 +239,12 @@ def telephony_status() -> dict[str, Any]:
         and os.getenv("TWILIO_VERIFY_SERVICE_SID", "").strip()
         and main.admin_password_configured() and credentials_ready
     )
+    if main.selected_voice_engine() == "gnani":
+        voice_provider_ready = bool(health.get("gnani_stt_at") and health.get("gnani_tts_at"))
+    else:
+        voice_provider_ready = bool(os.getenv("GEMINI_API_KEY", "").strip())
     manual_ready = bool(
-        main.outbound_calls_enabled() and main.admin_password_configured() and credentials_ready
+        voice_provider_ready and main.outbound_calls_enabled() and main.admin_password_configured() and credentials_ready
         and public_https and os.getenv("GEMINI_API_KEY", "").strip() and prefs
         and prefs["calling_consent"] and prefs["phone_storage_consent"]
         and prefs["phone_verified"] and prefs["destination_phone"]
@@ -251,13 +258,14 @@ def telephony_status() -> dict[str, Any]:
     )
     return {
         "manual_calls_enabled": manual_ready,
+        "voice_provider_ready": voice_provider_ready,
         "manual_call_route": "/api/calls",
         "automatic_calls_enabled": automatic_ready,
         "automatic_calls_configured": automatic_ready,
         "automatic_calls_reason": (
             "Automatic dispatch is configured for saved opt-ins; actual delivery still depends on a successful Twilio and Gemini Live call."
             if automatic_ready else
-            "Requires both outbound-call switches, admin password and server-only action token, valid provider setup, a verified opted-in destination, and an automatic-call preference."
+            "Requires manual calling to be enabled, provider diagnostics to pass, admin authentication, a verified destination, and explicit calling consent."
         ),
         "incoming_webhook_configured": webhook_configured,
         "incoming_webhook_expected_url": expected_url,
