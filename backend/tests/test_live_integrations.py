@@ -4,7 +4,7 @@ import os
 import unittest
 from unittest.mock import AsyncMock, patch
 
-from app.gnani_bridge import _is_supported_twilio_start, language_code, mulaw8k_to_pcm16, raw_wave_data, tts_payload
+from app.gnani_bridge import _is_supported_twilio_start, greeting_text, language_code, mulaw8k_to_pcm16, raw_wave_data, tts_payload
 from app.opportunity_discovery import normalize_job, search_live_opportunities
 
 
@@ -70,6 +70,13 @@ class TestGnaniBridgeHelpers(unittest.TestCase):
         self.assertEqual(payload["language"], "hi-IN")
         self.assertEqual(payload["audio_config"]["container"], "mulaw")
         self.assertEqual(payload["audio_config"]["sample_rate"], 8000)
+        self.assertNotIn("sample_width", payload["audio_config"])
+        self.assertNotIn("encoding", payload["audio_config"])
+
+    def test_first_greeting_uses_selected_language(self):
+        self.assertIn("ఆరా", greeting_text({"preferred_language": "Telugu"}))
+        self.assertIn("आरा", greeting_text({"preferred_language": "Hindi"}))
+        self.assertIn("AURA", greeting_text({"preferred_language": "English"}))
 
     def test_twilio_start_event_must_match_saved_call(self):
         message = {"start": {
