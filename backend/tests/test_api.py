@@ -13,6 +13,25 @@ from app.companion import detect_mood, immediate_safety_response
 
 
 class TestAuraBackend(unittest.TestCase):
+    def test_voice_engine_falls_back_to_gemini_when_optional_gnani_is_unconfigured(self):
+        from unittest.mock import patch
+        with patch.dict(os.environ, {
+            "AURA_VOICE_ENGINE": "gnani",
+            "GEMINI_API_KEY": "test-gemini-key",
+            "GNANI_API_KEY": "",
+            "GNANI_TTS_VOICE": "",
+        }, clear=False):
+            self.assertEqual(aura_main.selected_voice_engine(), "gemini_live")
+
+    def test_voice_engine_uses_gnani_when_all_required_credentials_exist(self):
+        from unittest.mock import patch
+        with patch.dict(os.environ, {
+            "AURA_VOICE_ENGINE": "gnani",
+            "GEMINI_API_KEY": "test-gemini-key",
+            "GNANI_API_KEY": "test-gnani-key",
+            "GNANI_TTS_VOICE": "Kaveri",
+        }, clear=False):
+            self.assertEqual(aura_main.selected_voice_engine(), "gnani")
     @classmethod
     def setUpClass(cls):
         from unittest.mock import patch
