@@ -2,7 +2,14 @@ export type Task = { id:string; title:string; description:string; category:strin
 export type Opportunity = { id:string; title:string; organization:string; type:string; deadline:string|null; url:string; location:string; remote_mode:string; description:string; eligibility:string; skills:string; source:string; stipend:string; status:string; is_verified:number; created_at:string; linked_tasks?:Task[] };
 export type Call = { id:string; phone:string; purpose:string; consent:number; status:string; transcript:string; created_at:string };
 export type Briefing = { headline:string; detail:string; suggested_action?:string; source_type:string; source_id?:string|null; source_title:string|null; rule:string; route?:string };
-export const API = process.env.NEXT_PUBLIC_AURA_API_URL || "http://localhost:8000";
+const LOCAL_API = "http://localhost:8000";
+const DEPLOYED_API = "https://aura-ai-1-a83b.onrender.com";
+const isLocalBrowser = typeof window !== "undefined" &&
+  (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1");
+// A deployed browser must never silently call its own machine's localhost.
+// Local development keeps the localhost default; Netlify uses the deployed Render API.
+export const API = (process.env.NEXT_PUBLIC_AURA_API_URL || "").trim().replace(/\\/$/, "") ||
+  (isLocalBrowser ? LOCAL_API : DEPLOYED_API);
 let csrfToken: string | null = null;
 export function setCsrfToken(token: string | null) { csrfToken = token; }
 export async function api<T>(path:string, options:RequestInit={}):Promise<T>{
