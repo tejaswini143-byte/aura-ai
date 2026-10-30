@@ -1190,12 +1190,14 @@ async def companion_chat(payload: CompanionChatIn, request: Request) -> dict[str
                 "conversation_saved": False, "automatic_call_triggered": False, "call_offer": False,
                 "call_unavailable_reason": "No automatic call was started from an immediate-risk message. Please contact a trusted person or local emergency services if you may be in danger."}
     service = GeminiService()
+    provider_error = None
     try:
         reply = await service.generate(messages, [], [], preferences=prefs)
         provider = "gemini"
-    except (GeminiConfigurationError, GeminiCredentialError, GeminiProviderError):
+    except (GeminiConfigurationError, GeminiCredentialError, GeminiProviderError) as exc:
         reply = fallback_companion_reply(payload.message, prefs["preferred_language"])
         provider = "fallback"
+        provider_error = str(exc)
 
     auto_call = None
     call_reason = None
@@ -1241,6 +1243,7 @@ async def companion_chat(payload: CompanionChatIn, request: Request) -> dict[str
     return {
         "reply": reply,
         "provider": provider,
+        "provider_error": provider_error,
         "mood": mood,
         "response_language": response_language,
         "conversation_saved": False,
