@@ -134,6 +134,7 @@ export default function Settings() {
       const result = await api<VerificationResult>("/api/phone-verification/check", { method: "POST", body: JSON.stringify({ code: verificationCode.trim() }) });
       if (result.status === "verified") {
         setPrefs(current => ({ ...current, phone_verified: true })); setVerificationPending(false); setVerificationState("verified"); setAttemptsRemaining(0); setVerificationCode("");
+        await loadBackendSettings();
       }
       setVerificationNotice(result.message);
     } catch (e) {
@@ -216,6 +217,7 @@ export default function Settings() {
       setVerificationState(next.phone_verified ? "verified" : "none");
       setPhoneInput(""); setStorePhone(false); setClearPhone(false);
       setVerificationSmsConsent(false); setVerificationCode(""); setVerificationNotice("");
+      await loadBackendSettings();
       setNotice("Companion preferences saved to this AURA backend.");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not save companion preferences");
