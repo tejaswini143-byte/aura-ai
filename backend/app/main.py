@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 import hashlib
+import ipaddress
 import logging
 import os
 import re
@@ -33,7 +34,7 @@ from app.voice_bridge import (
     twilio_websocket_signature_valid,
 )
 from app.phone_verification import VerificationStore, action_token_valid, E164_PATTERN, initialize as init_phone_verification, phone_key
-from app.auth import AdminSessionStore, SESSION_COOKIE, SESSION_TTL, initialize as init_admin_auth
+from app.auth import (AdminSessionStore, SESSION_COOKIE, SESSION_TTL, initialize as init_admin_auth, set_initial_password, stored_password_configured, verify_stored_password)
 from urllib.parse import urlsplit, urlunsplit
 
 load_dotenv()
@@ -353,7 +354,18 @@ admin_sessions = AdminSessionStore(db)
 
 def admin_password_configured() -> bool:
     password = os.getenv("AURA_ADMIN_PASSWORD", "")
-    return len(password) >= 16
+    if len(password) >= 16:
+        return True
+    with closing(db()) as conn:
+        return stored_password_configured(conn)
+
+
+def admin_password_valid(password: str) -> bool:
+    configured = os.getenv("AURA_ADMIN_PASSWORD", "")
+    if len(configured) >= 16:
+        return secrets.compare_digest(password.encode("utf-8"), configured.encode("utf-8"))
+    with closing(db()) as conn:
+        return verify_stored_password(conn, password)
 
 
 def request_admin_session(request: Request) -> dict[str, str] | None:
@@ -946,6 +958,32 @@ def auth_session(request: Request, response: Response) -> dict[str, Any]:
     return {"authenticated": True, "configured": True, "csrf_token": session["csrf_token"], "expires_at": session["expires_at"]}
 
 
+@app.post("/api/auth/setup")
+def setup_local_admin(payload: AdminLoginIn, request: Request, response: Response) -> dict[str, Any]:
+    """One-time local-development setup; never enabled for deployed production services."""
+    response.headers["Cache-Control"] = "no-store"
+    require_trusted_origin(request)
+    environment = os.getenv("AURA_ENVIRONMENT", "development").strip().lower()
+    client_host = request.client.host if request.client else ""
+    try:
+        is_loopback = ipaddress.ip_address(client_host).is_loopback
+    except ValueError:
+        is_loopback = False
+    if environment not in {"development", "dev", "local"} or not is_loopback:
+        raise HTTPException(403, "First-run password setup is available only from this computer in local development.")
+    if len(os.getenv("AURA_ADMIN_PASSWORD", "")) >= 16:
+        raise HTTPException(409, "AURA_ADMIN_PASSWORD is already configured on the server.")
+    with closing(db()) as conn:
+        created = set_initial_password(conn, payload.password)
+    if not created:
+        raise HTTPException(409, "An admin password has already been created. Sign in instead.")
+    session_token, csrf_token = admin_sessions.create()
+    response.set_cookie(key=SESSION_COOKIE, value=session_token, max_age=int(SESSION_TTL.total_seconds()),
+                        httponly=True, secure=admin_cookie_secure(), samesite=admin_cookie_samesite(), path="/api")
+    return {"authenticated": True, "configured": True, "csrf_token": csrf_token,
+            "expires_in_seconds": int(SESSION_TTL.total_seconds())}
+
+
 @app.post("/api/auth/login")
 def admin_login(payload: AdminLoginIn, request: Request, response: Response) -> dict[str, Any]:
     response.headers["Cache-Control"] = "no-store"
@@ -955,8 +993,7 @@ def admin_login(payload: AdminLoginIn, request: Request, response: Response) -> 
     client_key = request.client.host if request.client else "unknown-client"
     if admin_sessions.login_locked(client_key):
         raise HTTPException(429, "Too many sign-in attempts. Wait 15 minutes before trying again.")
-    expected = os.environ["AURA_ADMIN_PASSWORD"]
-    if not secrets.compare_digest(payload.password.encode("utf-8"), expected.encode("utf-8")):
+    if not admin_password_valid(payload.password):
         admin_sessions.login_failed(client_key)
         raise HTTPException(401, "The password was not accepted.")
     admin_sessions.login_succeeded(client_key)
