@@ -24,7 +24,7 @@ type VerificationResult = { status: string; message: string };
 type VerificationStatus = { status: string; retry_after_seconds: number; attempts_remaining: number; expires_at: string | null };
 const initial: CompanionPrefs = {
   preferred_language: "English", mixed_language: false, personality: "Friend",
-  response_length: "Balanced", communication_tone: "Gentle", voice_preference: "Default", calling_consent: false, automatic_mood_calls: false,
+  response_length: "Brief", communication_tone: "Gentle", voice_preference: "Default", calling_consent: false, automatic_mood_calls: false,
   quiet_hours_start: "22:00", quiet_hours_end: "08:00", timezone: "Asia/Kolkata",
   destination_phone_present: false, destination_phone_masked: null, phone_verified: false,
   reminder_calls_enabled: false, phone_storage_consent: false, store_call_transcripts: false,
