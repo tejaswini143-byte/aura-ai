@@ -2138,6 +2138,29 @@ def schedule_call(payload: CallIn, request: Request) -> dict[str, Any]:
 
 
 
+
+@app.post("/api/calls/test")
+def schedule_verified_number_test_call(request: Request) -> dict[str, Any]:
+    """Start one explicitly requested test call to the already verified saved number."""
+    require_action_authorization(request)
+    with closing(db()) as conn:
+        prefs = conn.execute(
+            "SELECT destination_phone, calling_consent, phone_storage_consent, phone_verified FROM companion_preferences WHERE id=1"
+        ).fetchone()
+    if not prefs or not prefs["destination_phone"]:
+        raise HTTPException(403, "Save a destination number in AURA Settings first.")
+    if not prefs["phone_storage_consent"] or not prefs["phone_verified"]:
+        raise HTTPException(403, "Verify the saved destination number before requesting a test call.")
+    if not prefs["calling_consent"]:
+        raise HTTPException(403, "Enable consent for individually requested calls in AURA Settings first.")
+    payload = CallIn(
+        phone=prefs["destination_phone"],
+        purpose="AURA voice integration test",
+        consent=True,
+        idempotency_key=f"aura-manual-voice-test:{uuid.uuid4()}",
+    )
+    return schedule_call(payload, request)
+
 def proactive_calls_switch_on() -> bool:
     return (
         outbound_calls_enabled()
