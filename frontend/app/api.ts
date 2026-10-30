@@ -9,7 +9,7 @@ export async function api<T>(path:string, options:RequestInit={}):Promise<T>{
   const headers = new Headers(options.headers);
   headers.set("Content-Type", "application/json");
   const method = (options.method || "GET").toUpperCase();
-  if (csrfToken && ["POST", "PUT", "PATCH", "DELETE"].includes(method) && path !== "/api/auth/login") headers.set("X-CSRF-Token", csrfToken);
+  if (csrfToken && ["POST", "PUT", "PATCH", "DELETE"].includes(method) && path !== "/api/auth/login" && path !== "/api/auth/setup") headers.set("X-CSRF-Token", csrfToken);
   const res=await fetch(`${API}${path}`,{...options,credentials:"include",headers});
   const data=await res.json().catch(()=>({}));
   if(!res.ok) throw new Error(typeof data.detail==="string"?data.detail:`Request failed (${res.status})`);
