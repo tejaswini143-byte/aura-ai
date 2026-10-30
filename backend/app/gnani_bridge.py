@@ -34,10 +34,26 @@ def language_code(preferences: dict[str, Any]) -> str:
     )
 
 
+def greeting_text(preferences: dict[str, Any]) -> str:
+    """Return a short, transparent first greeting in the configured language."""
+    language = str(preferences.get("preferred_language") or "English").casefold()
+    if language == "telugu":
+        return "నమస్కారం, నేను ఆరా. ఈరోజు మీరు ఎలా ఉన్నారు? మీతో మాట్లాడటానికి నేను ఇక్కడ ఉన్నాను."
+    if language == "hindi":
+        return "नमस्ते, मैं आरा हूँ। आज आप कैसा महसूस कर रहे हैं? मैं आपकी बात सुनने के लिए यहाँ हूँ।"
+    return "Hi, I'm AURA. I'm here for your check-in. How are you feeling today?"
+
+
 def tts_payload(text: str, preferences: dict[str, Any]) -> dict[str, Any]:
-    voice = os.getenv("GNANI_TTS_VOICE", "").strip()
+    lang = language_code(preferences)
+    voice_key = {
+        "te-IN": "GNANI_TTS_VOICE_TELUGU",
+        "hi-IN": "GNANI_TTS_VOICE_HINDI",
+        "en-IN": "GNANI_TTS_VOICE_ENGLISH",
+    }.get(lang, "")
+    voice = (os.getenv(voice_key, "").strip() if voice_key else "") or os.getenv("GNANI_TTS_VOICE", "").strip()
     if not voice:
-        raise RuntimeError("GNANI_TTS_VOICE is not configured.")
+        raise RuntimeError(f"No Gnani Timbre voice is configured for {lang}.")
     return {
         "text": text[:1800],
         "voice": voice,
@@ -45,10 +61,10 @@ def tts_payload(text: str, preferences: dict[str, Any]) -> dict[str, Any]:
         "language": language_code(preferences),
         "speed": 1.0,
         "audio_config": {
+            # Gnani documents container=mulaw as raw 8 kHz G.711 mu-law.
+            # It forces 8 kHz; PCM sample_width/encoding are intentionally omitted.
             "sample_rate": 8000,
             "num_channels": 1,
-            "sample_width": 1,
-            "encoding": "pcm_mulaw",
             "container": "mulaw",
         },
     }
@@ -203,6 +219,15 @@ async def run_gnani_bidirectional_bridge(
 
         async def receive_transcripts() -> None:
             async with httpx.AsyncClient(timeout=25.0) as client:
+                # Start with a spoken greeting instead of leaving the recipient
+                # in silence until their first utterance is transcribed.
+                try:
+                    await asyncio.wait_for(stream_ready.wait(), timeout=15)
+                except asyncio.TimeoutError as exc:
+                    raise RuntimeError("Twilio did not start the media stream in time.") from exc
+                if stopped.is_set():
+                    return
+                await speak_reply(greeting_text(preferences), client, preferences)
                 while not stopped.is_set():
                     raw = await asyncio.wait_for(stt.recv(), timeout=IDLE_TIMEOUT_SECONDS)
                     try:
