@@ -87,7 +87,7 @@ def selected_voice_engine() -> str:
     Older Render blueprints selected Gnani even when its optional credentials were
     absent. In that case, fall back to Gemini Live rather than rejecting the call.
     """
-    requested = selected_voice_engine()
+    requested = os.getenv("AURA_VOICE_ENGINE", "gemini_live").strip().lower()
     gemini_ready = bool(os.getenv("GEMINI_API_KEY", "").strip())
     gnani_ready = bool(
         os.getenv("GNANI_API_KEY", "").strip()
