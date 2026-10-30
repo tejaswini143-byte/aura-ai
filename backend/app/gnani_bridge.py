@@ -45,9 +45,15 @@ def greeting_text(preferences: dict[str, Any]) -> str:
 
 
 def tts_payload(text: str, preferences: dict[str, Any]) -> dict[str, Any]:
-    voice = os.getenv("GNANI_TTS_VOICE", "").strip()
+    lang = language_code(preferences)
+    voice_key = {
+        "te-IN": "GNANI_TTS_VOICE_TELUGU",
+        "hi-IN": "GNANI_TTS_VOICE_HINDI",
+        "en-IN": "GNANI_TTS_VOICE_ENGLISH",
+    }.get(lang, "")
+    voice = (os.getenv(voice_key, "").strip() if voice_key else "") or os.getenv("GNANI_TTS_VOICE", "").strip()
     if not voice:
-        raise RuntimeError("GNANI_TTS_VOICE is not configured.")
+        raise RuntimeError(f"No Gnani Timbre voice is configured for {lang}.")
     return {
         "text": text[:1800],
         "voice": voice,
