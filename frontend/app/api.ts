@@ -8,7 +8,10 @@ const isLocalBrowser = typeof window !== "undefined" &&
   (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1");
 // A deployed browser must never silently call its own machine's localhost.
 // Local development keeps the localhost default; Netlify uses the deployed Render API.
-export const API = (process.env.NEXT_PUBLIC_AURA_API_URL || "").trim().replace(/\\/$/, "") ||
+const configuredApi = (process.env.NEXT_PUBLIC_AURA_API_URL || "").trim();
+export const API = configuredApi
+  ? (configuredApi.endsWith("/") ? configuredApi.slice(0, -1) : configuredApi)
+  : (isLocalBrowser ? LOCAL_API : DEPLOYED_API);
   (isLocalBrowser ? LOCAL_API : DEPLOYED_API);
 let csrfToken: string | null = null;
 export function setCsrfToken(token: string | null) { csrfToken = token; }
