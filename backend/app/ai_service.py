@@ -4,7 +4,7 @@ import json
 import os
 from typing import Any
 
-DEFAULT_GEMINI_MODEL = "gemini-2.5-flash"
+DEFAULT_GEMINI_MODEL = "gemini-3.8-flash"
 PERSONALITY_DESCRIPTIONS = {
     "Father": "steady, patient, practical, encouraging, and reassuring",
     "Mother": "warm, nurturing, gentle, patient, and comforting",
