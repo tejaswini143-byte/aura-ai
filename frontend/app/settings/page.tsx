@@ -48,6 +48,8 @@ export default function Settings() {
   const [adminConfigured, setAdminConfigured] = useState<boolean | null>(null);
   const [authenticated, setAuthenticated] = useState(false);
   const [adminPassword, setAdminPassword] = useState("");
+  const [setupPassword, setSetupPassword] = useState("");
+  const [confirmSetupPassword, setConfirmSetupPassword] = useState("");
   const [verificationSmsConsent, setVerificationSmsConsent] = useState(false);
   const [verificationCode, setVerificationCode] = useState("");
   const [verificationPending, setVerificationPending] = useState(false);
@@ -103,6 +105,21 @@ export default function Settings() {
     finally { setLoading(false); }
   }
 
+  async function setupAdminPassword(e: FormEvent) {
+    e.preventDefault(); setError(""); setNotice("");
+    if (setupPassword.length < 16) { setError("Use at least 16 characters for your admin password."); return; }
+    if (setupPassword !== confirmSetupPassword) { setError("The passwords do not match."); return; }
+    setLoading(true);
+    try {
+      const session = await api<AuthSession>("/api/auth/setup", { method: "POST", body: JSON.stringify({ password: setupPassword }) });
+      setSetupPassword(""); setConfirmSetupPassword("");
+      setCsrfToken(session.csrf_token); setAuthenticated(true); setAdminConfigured(true);
+      await loadBackendSettings();
+      setNotice("Your local AURA admin password is set. Keep it private.");
+    } catch (e) { setError(e instanceof Error ? e.message : "Could not set up the admin password."); }
+    finally { setLoading(false); }
+  }
+
   async function signOut() {
     setError("");
     try { await api("/api/auth/logout", { method: "POST" }); }
@@ -112,10 +129,9 @@ export default function Settings() {
 
   async function startVerification() {
     setVerificationBusy(true); setVerificationNotice(""); setError("");
-    setVerificationSmsConsent(false);
     try {
       const result = await api<VerificationResult>("/api/phone-verification/start", { method: "POST", body: JSON.stringify({ sms_consent: verificationSmsConsent }) });
-      setVerificationPending(result.status === "pending"); setVerificationState(result.status); setAttemptsRemaining(5); setVerificationCode(""); setResendSeconds(60); setVerificationNotice(result.message);
+      setVerificationPending(result.status === "pending"); setVerificationState(result.status); setAttemptsRemaining(5); setVerificationCode(""); setResendSeconds(60); setVerificationNotice(result.message); setVerificationSmsConsent(false);
     } catch (e) {
       const message = e instanceof Error ? e.message : "Could not request a verification code.";
       if (message.toLowerCase().includes("recently")) setResendSeconds(60);
@@ -184,8 +200,13 @@ export default function Settings() {
   if (!authLoaded) return <section className="panel settings-panel"><p role="status">Checking secure admin session…</p></section>;
   if (adminConfigured === null) return <section className="panel settings-panel"><h2>Backend session unavailable</h2><p className="muted">AURA could not check the backend session. Confirm the backend is running, then reload this page.</p>{error && <p className="inline-error" role="alert">{error}</p>}</section>;
   if (adminConfigured === false) return <section className="panel settings-panel">
-    <span className="eyebrow">ADMIN SIGN-IN</span><h2>Secure Settings are disabled</h2>
-    <p className="muted">Set a strong server-only AURA_ADMIN_PASSWORD (at least 16 characters) in backend/.env, then restart the backend. No default password is used.</p>
+    <span className="eyebrow">FIRST-TIME LOCAL SETUP</span><h2>Create your AURA admin password</h2>
+    <p className="muted">Create a private password with at least 16 characters. During local development only, AURA stores a salted password hash in its local SQLite database. The setup endpoint is restricted to this computer and can be used only once. Deployed production instances still require a server-side environment password.</p>
+    <form onSubmit={setupAdminPassword}>
+      <label>New admin password<input type="password" value={setupPassword} onChange={e => setSetupPassword(e.target.value)} minLength={16} autoComplete="new-password" required /></label>
+      <label>Confirm admin password<input type="password" value={confirmSetupPassword} onChange={e => setConfirmSetupPassword(e.target.value)} minLength={16} autoComplete="new-password" required /></label>
+      <button disabled={loading || setupPassword.length < 16 || setupPassword !== confirmSetupPassword}>Create secure password</button>
+    </form>
     {error && <p className="inline-error" role="alert">{error}</p>}
   </section>;
   if (!authenticated) return <section className="panel settings-panel">
