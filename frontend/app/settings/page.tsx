@@ -168,6 +168,18 @@ export default function Settings() {
     finally { setProviderBusy(false); }
   }
 
+
+  async function startOneTimeVoiceTest() {
+    if (!window.confirm("AURA will place one test call to the verified number saved in Settings. Continue?")) return;
+    setProviderBusy(true); setProviderActionNotice(""); setError("");
+    try {
+      const result = await api<{ status: string; message: string }>("/api/calls/test", { method: "POST" });
+      setProviderActionNotice(result.message || ("Test request status: " + result.status));
+      await loadBackendSettings();
+    } catch (e) { setError(e instanceof Error ? e.message : "The test request could not be started."); }
+    finally { setProviderBusy(false); }
+  }
+
   if (!authLoaded) return <section className="panel settings-panel"><p role="status">Checking secure admin session…</p></section>;
   if (adminConfigured === null) return <section className="panel settings-panel"><h2>Backend session unavailable</h2><p className="muted">AURA could not check the backend session. Confirm the backend is running, then reload this page.</p>{error && <p className="inline-error" role="alert">{error}</p>}</section>;
   if (adminConfigured === false) return <section className="panel settings-panel">
@@ -273,6 +285,8 @@ export default function Settings() {
         <button type="button" className="btn-secondary" disabled={providerBusy || !providers?.twilio.configured || Boolean(providers?.twilio.incoming_webhook_configured)} onClick={configureIncomingWebhook}>{providerBusy ? "Working…" : providers?.twilio.incoming_webhook_configured ? "Incoming webhook configured" : "Configure Twilio incoming webhook"}</button>
       </div>
       {providerActionNotice && <p className="success-copy" role="status">{providerActionNotice}</p>}
+      <button type="button" disabled={providerBusy || !providers?.twilio.manual_calls_enabled || !prefs.phone_verified || !prefs.calling_consent} onClick={startOneTimeVoiceTest}>Start one-time voice test call</button>
+      <p className="fine-print">This button only becomes available after you verify your saved number and enable consent for individually requested calls. Each test call is started by an explicit click; automatic calls remain separately disabled.</p>
       <p className="fine-print">Configured means a value is present; it does not validate credentials or account permissions. No provider request is made by this status check.</p>
     </section>
     {error && <p className="inline-error" role="alert">{error}</p>}{notice && <p className="success-copy" role="status">{notice}</p>}
