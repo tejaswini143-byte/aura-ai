@@ -12,7 +12,6 @@ const configuredApi = (process.env.NEXT_PUBLIC_AURA_API_URL || "").trim();
 export const API = configuredApi
   ? (configuredApi.endsWith("/") ? configuredApi.slice(0, -1) : configuredApi)
   : (isLocalBrowser ? LOCAL_API : DEPLOYED_API);
-  (isLocalBrowser ? LOCAL_API : DEPLOYED_API);
 let csrfToken: string | null = null;
 export function setCsrfToken(token: string | null) { csrfToken = token; }
 export async function api<T>(path:string, options:RequestInit={}):Promise<T>{
