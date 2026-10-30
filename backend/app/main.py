@@ -81,6 +81,27 @@ def now_iso() -> str:
 def outbound_calls_enabled() -> bool:
     return os.getenv("AURA_OUTBOUND_CALLS_ENABLED", "false").strip().lower() == "true"
 
+def selected_voice_engine() -> str:
+    """Choose a usable Twilio voice bridge, preferring configured Gnani or Gemini Live.
+
+    Older Render blueprints selected Gnani even when its optional credentials were
+    absent. In that case, fall back to Gemini Live rather than rejecting the call.
+    """
+    requested = os.getenv("AURA_VOICE_ENGINE", "gemini_live").strip().lower()
+    gemini_ready = bool(os.getenv("GEMINI_API_KEY", "").strip())
+    gnani_ready = bool(
+        os.getenv("GNANI_API_KEY", "").strip()
+        and os.getenv("GNANI_TTS_VOICE", "").strip()
+        and gemini_ready
+    )
+    if requested == "gnani":
+        if gnani_ready:
+            return "gnani"
+        if gemini_ready:
+            return "gemini_live"
+        return "gnani"
+    return "gemini_live"
+
 
 def quiet_hours_active(now: datetime, start: str, end: str) -> bool:
     local_time = now.timetz().replace(tzinfo=None)
@@ -1083,20 +1104,25 @@ def provider_status() -> dict[str, Any]:
             "configured": bool(os.getenv("GNANI_API_KEY", "").strip()),
             "voice_name_configured": bool(os.getenv("GNANI_TTS_VOICE", "").strip()),
             "bridge_implemented": True,
-            "voice_engine_selected": os.getenv("AURA_VOICE_ENGINE", "gemini_live").strip().lower() == "gnani",
+            "voice_engine_selected": selected_voice_engine() == "gnani",
             "voice_bridge_enabled": (
-                os.getenv("AURA_VOICE_ENGINE", "gemini_live").strip().lower() == "gnani"
+                selected_voice_engine() == "gnani"
                 and bool(os.getenv("GNANI_API_KEY", "").strip())
                 and bool(os.getenv("GNANI_TTS_VOICE", "").strip())
                 and bool(os.getenv("GEMINI_API_KEY", "").strip())
             ),
             "reason": (
                 "Gnani Prisma STT and Timbre TTS are selected; a real signed Twilio stream is still required to verify end-to-end voice."
-                if os.getenv("AURA_VOICE_ENGINE", "gemini_live").strip().lower() == "gnani"
+                if selected_voice_engine() == "gnani"
                 and os.getenv("GNANI_API_KEY", "").strip()
                 and os.getenv("GNANI_TTS_VOICE", "").strip()
                 and os.getenv("GEMINI_API_KEY", "").strip()
-                else "Configure the Gnani credential, choose a supported Timbre voice, ensure Gemini text access is available, and select the Gnani voice engine."
+                else (
+                    "Gnani is selected but not fully configured; AURA is falling back to Gemini Live for Twilio calls."
+                    if os.getenv("AURA_VOICE_ENGINE", "gemini_live").strip().lower() == "gnani"
+                    and selected_voice_engine() == "gemini_live"
+                    else "Configure the Gnani credential, choose a supported Timbre voice, ensure Gemini text access is available, and select the Gnani voice engine."
+                )
             ),
             "stt_connection_verified": live.get("gnani_stt_connection_verified", False),
             "tts_connection_verified": live.get("gnani_tts_connection_verified", False),
@@ -2251,7 +2277,7 @@ async def telephony_media_stream(call_id: str, websocket: WebSocket) -> None:
         return
 
     api_key = os.getenv("GEMINI_API_KEY", "").strip()
-    voice_engine = os.getenv("AURA_VOICE_ENGINE", "gemini_live").strip().lower()
+    voice_engine = selected_voice_engine()
     if voice_engine not in {"gemini_live", "gnani"}:
         await websocket.close(code=1008)
         return
