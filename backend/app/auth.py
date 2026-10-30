@@ -34,6 +34,13 @@ def client_hash(client: str) -> str:
 
 def initialize(conn: sqlite3.Connection) -> None:
     conn.executescript("""
+        CREATE TABLE IF NOT EXISTS admin_credentials (
+            id INTEGER PRIMARY KEY CHECK (id = 1),
+            salt BLOB NOT NULL,
+            password_hash BLOB NOT NULL,
+            iterations INTEGER NOT NULL,
+            created_at TEXT NOT NULL
+        );
         CREATE TABLE IF NOT EXISTS admin_sessions (
             session_hash TEXT PRIMARY KEY,
             csrf_token TEXT NOT NULL,
@@ -129,3 +136,30 @@ class AdminSessionStore:
         with closing(self.db_factory()) as conn:
             conn.execute("DELETE FROM admin_login_limits WHERE client_hash=?", (client_hash(client),))
             conn.commit()
+
+
+# Local first-run password setup stores only a salted PBKDF2 hash, never plaintext.
+def set_initial_password(conn: sqlite3.Connection, password: str) -> bool:
+    if len(password) < 16:
+        raise ValueError("Use an admin password with at least 16 characters.")
+    salt = secrets.token_bytes(32)
+    iterations = 600_000
+    digest = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt, iterations)
+    cursor = conn.execute(
+        "INSERT OR IGNORE INTO admin_credentials(id, salt, password_hash, iterations, created_at) VALUES(1, ?, ?, ?, ?)",
+        (salt, digest, iterations, iso_utc()),
+    )
+    conn.commit()
+    return cursor.rowcount == 1
+
+
+def stored_password_configured(conn: sqlite3.Connection) -> bool:
+    return conn.execute("SELECT 1 FROM admin_credentials WHERE id=1").fetchone() is not None
+
+
+def verify_stored_password(conn: sqlite3.Connection, password: str) -> bool:
+    row = conn.execute("SELECT salt, password_hash, iterations FROM admin_credentials WHERE id=1").fetchone()
+    if not row:
+        return False
+    candidate = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), row["salt"], int(row["iterations"]))
+    return hmac.compare_digest(candidate, row["password_hash"])
