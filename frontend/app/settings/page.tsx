@@ -14,9 +14,9 @@ type CompanionPrefs = {
 };
 type ProviderStatus = {
   gemini: { configured: boolean };
-  twilio: { configured: boolean; manual_calls_enabled: boolean; automatic_calls_enabled: boolean; destination_verification_available: boolean };
+  twilio: { configured: boolean; manual_calls_enabled: boolean; automatic_calls_enabled: boolean; destination_verification_available: boolean; incoming_webhook_configured?: boolean; incoming_webhook_expected_url?: string | null };
   dotvoice: { configured: boolean; verified: boolean; calls_enabled: boolean };
-  gnani: { configured: boolean; voice_bridge_enabled: boolean };
+  gnani: { configured: boolean; voice_bridge_enabled: boolean; stt_connection_verified?: boolean; tts_connection_verified?: boolean };
   gemini_live: { credential_present: boolean; model?: string; access_verified: boolean; bridge_implemented?: boolean; voice_bridge_enabled: boolean; reason?: string };
 };
 type AuthSession = { authenticated: boolean; configured: boolean; csrf_token: string | null; message?: string; expires_in_seconds?: number };
@@ -56,6 +56,8 @@ export default function Settings() {
   const [verificationBusy, setVerificationBusy] = useState(false);
   const [verificationNotice, setVerificationNotice] = useState("");
   const [resendSeconds, setResendSeconds] = useState(0);
+  const [providerBusy, setProviderBusy] = useState(false);
+  const [providerActionNotice, setProviderActionNotice] = useState("");
 
   async function loadBackendSettings() {
     const [settings, providerStatus, verification] = await Promise.all([
@@ -142,6 +144,40 @@ export default function Settings() {
       } catch { /* keep the verification error visible if the status refresh fails */ }
     }
     finally { setVerificationBusy(false); }
+  }
+
+
+  async function testGnaniConnections() {
+    setProviderBusy(true); setProviderActionNotice(""); setError("");
+    try {
+      const result = await api<{ ok: boolean; message: string; stt: { ok: boolean }; tts: Record<string, { ok: boolean; voice?: string; error?: string }> }>("/api/providers/gnani/test", { method: "POST" });
+      const details = Object.entries(result.tts).map(([language, item]) => `${language}: ${item.ok ? `OK (${item.voice})` : `failed (${item.error || "unknown"})`}`).join(" · ");
+      setProviderActionNotice(result.message + " " + details);
+      await loadBackendSettings();
+    } catch (e) { setError(e instanceof Error ? e.message : "Gnani diagnostics failed."); }
+    finally { setProviderBusy(false); }
+  }
+
+  async function configureIncomingWebhook() {
+    setProviderBusy(true); setProviderActionNotice(""); setError("");
+    try {
+      const result = await api<{ ok: boolean; url: string }>("/api/telephony/configure-incoming-webhook", { method: "POST" });
+      setProviderActionNotice(`Twilio incoming voice webhook configured: ${result.url}`);
+      await loadBackendSettings();
+    } catch (e) { setError(e instanceof Error ? e.message : "Could not configure the Twilio incoming webhook."); }
+    finally { setProviderBusy(false); }
+  }
+
+
+  async function startOneTimeVoiceTest() {
+    if (!window.confirm("AURA will place one test call to the verified number saved in Settings. Continue?")) return;
+    setProviderBusy(true); setProviderActionNotice(""); setError("");
+    try {
+      const result = await api<{ status: string; message: string }>("/api/calls/test", { method: "POST" });
+      setProviderActionNotice(result.message || ("Test request status: " + result.status));
+      await loadBackendSettings();
+    } catch (e) { setError(e instanceof Error ? e.message : "The test request could not be started."); }
+    finally { setProviderBusy(false); }
   }
 
   if (!authLoaded) return <section className="panel settings-panel"><p role="status">Checking secure admin session…</p></section>;
@@ -243,6 +279,14 @@ export default function Settings() {
         <b>Gnani</b><span>{checkLabel(providers.gnani.configured)} · realtime voice bridge {providers.gnani.voice_bridge_enabled ? "enabled" : "not implemented"}</span>
         <b>Gemini Live</b><span>{providers.gemini_live.credential_present ? "Gemini credential present" : "Gemini credential missing"} · model {providers.gemini_live.model ?? "not selected"} · bridge {providers.gemini_live.bridge_implemented ? "implemented" : "not implemented"}; provider access and WSS connection {providers.gemini_live.access_verified ? "verified" : "not verified"}</span>
       </div>}
+
+      <div className="form-grid">
+        <button type="button" className="btn-secondary" disabled={providerBusy || !providers?.gnani.voice_bridge_enabled} onClick={testGnaniConnections}>{providerBusy ? "Testing…" : "Test Gnani STT + Telugu/Hindi/English TTS"}</button>
+        <button type="button" className="btn-secondary" disabled={providerBusy || !providers?.twilio.configured || Boolean(providers?.twilio.incoming_webhook_configured)} onClick={configureIncomingWebhook}>{providerBusy ? "Working…" : providers?.twilio.incoming_webhook_configured ? "Incoming webhook configured" : "Configure Twilio incoming webhook"}</button>
+      </div>
+      {providerActionNotice && <p className="success-copy" role="status">{providerActionNotice}</p>}
+      <button type="button" disabled={providerBusy || !providers?.twilio.manual_calls_enabled || !prefs.phone_verified || !prefs.calling_consent} onClick={startOneTimeVoiceTest}>Start one-time voice test call</button>
+      <p className="fine-print">This button only becomes available after you verify your saved number and enable consent for individually requested calls. Each test call is started by an explicit click; automatic calls remain separately disabled.</p>
       <p className="fine-print">Configured means a value is present; it does not validate credentials or account permissions. No provider request is made by this status check.</p>
     </section>
     {error && <p className="inline-error" role="alert">{error}</p>}{notice && <p className="success-copy" role="status">{notice}</p>}
